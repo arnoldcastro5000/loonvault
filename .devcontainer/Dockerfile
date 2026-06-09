@@ -41,4 +41,13 @@ RUN GITLEAKS_VERSION=$(curl -fsSL https://api.github.com/repos/gitleaks/gitleaks
   && curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
     | tar -xz -C /usr/local/bin gitleaks
 
+RUN curl -fsSL https://apt.releases.hashicorp.com/gpg \
+    | gpg --dearmor > /usr/share/keyrings/hashicorp-archive-keyring.gpg \
+  && echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+    https://apt.releases.hashicorp.com bookworm main" \
+    > /etc/apt/sources.list.d/hashicorp.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends terraform \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 USER node
