@@ -12,6 +12,21 @@ bootstrap:
 bootstrap-migrate:
     cd infra/bootstrap && terraform init -migrate-state -backend-config=backend.hcl
 
+# Init org module with backend config (outside devcontainer, run once)
+# Requires infra/org/backend.hcl — copy from backend.hcl.example and fill in account ID
+org-init:
+    cd infra/org && terraform init -backend-config=backend.hcl
+
+# Plan org-level controls (SCP, etc.) — outside devcontainer
+org-plan:
+    terraform fmt -recursive -check infra/
+    cd infra/org && terraform validate && terraform plan
+
+# Apply org-level controls (SCP, etc.) — outside devcontainer
+org-apply:
+    terraform fmt -recursive -check infra/
+    cd infra/org && terraform validate && terraform apply
+
 # Apply the full infrastructure stack (outside devcontainer)
 apply:
     terraform fmt -recursive -check infra/

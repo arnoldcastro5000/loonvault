@@ -27,7 +27,9 @@ jobs:
         run: terraform fmt -recursive -check infra/
 
       - name: validate
-        run: cd infra/bootstrap && terraform init -backend=false && terraform validate
+        run: |
+          cd infra/bootstrap && terraform init -backend=false && terraform validate
+          cd ../org && terraform init -backend=false && terraform validate
 
       - name: tflint
         run: |
