@@ -1,0 +1,44 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "aws-account-id-arn"
+description = "AWS account ID embedded in ARN"
+regex = '''arn:aws:[a-z0-9\-]*:[a-z0-9\-]*:(\d{12})[:/]'''
+secretGroup = 1
+
+[[rules]]
+id = "aws-account-id-resource"
+description = "AWS account ID embedded in resource name"
+regex = '''(?i)(?:bucket|table|queue|function|cluster)\s*=\s*"[a-z0-9\-]+-(\d{12})["-]'''
+secretGroup = 1
+
+[[rules]]
+id = "aws-account-id-sqs-url"
+description = "AWS account ID in SQS queue URL"
+regex = '''https://sqs\.[a-z0-9\-]+\.amazonaws\.com/(\d{12})/'''
+secretGroup = 1
+
+[[rules]]
+id = "aws-account-id-variable"
+description = "AWS account ID in standalone variable assignment"
+regex = '''(?i)(?:account[_\-]?id|aws[_\-]?account)\s*[:=]\s*["']?(\d{12})["']?'''
+secretGroup = 1
+
+[[rules]]
+id = "aws-account-id-ecr"
+description = "AWS account ID in ECR registry URL"
+regex = '''(\d{12})\.dkr\.ecr\.[a-z0-9\-]+\.amazonaws\.com'''
+secretGroup = 1
+
+[[rules]]
+id = "aws-account-id-iam-principal"
+description = "AWS account ID as bare IAM Principal (no ARN)"
+regex = '''"AWS"\s*:\s*"(\d{12})"'''
+secretGroup = 1
+
+[[rules]]
+id = "aws-account-id-console-url"
+description = "AWS account ID in console deep-link URL"
+regex = '''[?&#]accountId=(\d{12})'''
+secretGroup = 1

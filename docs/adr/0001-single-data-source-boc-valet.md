@@ -1,0 +1,3 @@
+# Single data source: Bank of Canada Valet API only
+
+LoonVault ingests data exclusively from the Bank of Canada Valet API. Statistics Canada publishes richer indicators (household debt service ratio, corporate debt service ratio, national balance sheet accounts) that would strengthen the Pressure Metric catalogue, but were excluded to keep the ingestion pipeline simple, the data source authoritative, and the project within scope. If a future indicator requires Statistics Canada, a second ingest path must be added with its own authentication, rate-limiting, and schema considerations — that is a meaningful scope expansion, not a one-line change.

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WORKSPACE="$(cd "$(dirname "$0")" && pwd)"
+
+if [ ! -f "$WORKSPACE/.claude/settings.local.json" ]; then
+  echo "WARNING: .claude/settings.local.json not found — git and gh will not be available inside the sandbox." >&2
+fi
+
+# Start container if not already running
+devcontainer up --workspace-folder "$WORKSPACE"
+
+# Drop into bash — auth persists in ~/.claude.json inside the container
+devcontainer exec --workspace-folder "$WORKSPACE" bash

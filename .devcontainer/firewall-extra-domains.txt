@@ -1,0 +1,5 @@
+# Extra domains to allow through the egress firewall.
+# Edit this file on WSL2. It is read-only inside the container.
+# One domain per line. Lines starting with # are ignored.
+# After editing, re-run the firewall inside the container:
+#   sudo /usr/local/bin/init-firewall.sh

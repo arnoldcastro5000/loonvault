@@ -1,0 +1,50 @@
+detectors:
+  - name: AWSAccountIDinARN
+    keywords:
+      - "arn:aws:"
+    regex:
+      account_id: 'arn:aws:[a-z0-9\-]*:[a-z0-9\-]*:(\d{12})[:/]'
+
+  - name: AWSAccountIDinResourceName
+    keywords:
+      - bucket
+      - table
+      - queue
+      - function
+      - cluster
+    regex:
+      account_id: '(?i)(?:bucket|table|queue|function|cluster)\s*=\s*"[a-z0-9\-]+-(\d{12})["-]'
+
+  - name: AWSAccountIDinSQSURL
+    keywords:
+      - "sqs."
+      - "amazonaws.com"
+    regex:
+      account_id: 'https://sqs\.[a-z0-9\-]+\.amazonaws\.com/(\d{12})/'
+
+  - name: AWSAccountIDinVariable
+    keywords:
+      - account_id
+      - accountid
+      - aws_account
+      - accountId
+    regex:
+      account_id: "(?i)(?:account[_\\-]?id|aws[_\\-]?account)\\s*[:=]\\s*[\"']?(\\d{12})[\"']?"
+
+  - name: AWSAccountIDinECR
+    keywords:
+      - "dkr.ecr"
+    regex:
+      account_id: '(\d{12})\.dkr\.ecr\.[a-z0-9\-]+\.amazonaws\.com'
+
+  - name: AWSAccountIDinIAMPrincipal
+    keywords:
+      - '"AWS"'
+    regex:
+      account_id: '"AWS"\s*:\s*"(\d{12})"'
+
+  - name: AWSAccountIDinConsoleURL
+    keywords:
+      - "accountId="
+    regex:
+      account_id: '[?&#]accountId=(\d{12})'

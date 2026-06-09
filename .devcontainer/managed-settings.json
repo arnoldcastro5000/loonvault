@@ -1,0 +1,8 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "enableWeakerNestedSandbox": true,
+    "failIfUnavailable": false,
+    "allowUnsandboxedCommands": false
+  }
+}
