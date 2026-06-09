@@ -59,6 +59,9 @@ resource "aws_kms_alias" "tfstate" {
 
 # S3 bucket for Terraform remote state
 resource "aws_s3_bucket" "tfstate" {
+  #checkov:skip=CKV_AWS_18:Access logging requires a separate logging bucket; bootstrap cannot depend on itself
+  #checkov:skip=CKV2_AWS_62:Event notifications not required for Terraform state storage
+  #checkov:skip=CKV_AWS_144:Cross-region replication not required; project is single-region (ca-central-1)
   bucket = local.bucket_name
 
   lifecycle {
@@ -132,6 +135,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "tfstate" {
     status = "Enabled"
 
     filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
 
     noncurrent_version_expiration {
       newer_noncurrent_versions = 10
