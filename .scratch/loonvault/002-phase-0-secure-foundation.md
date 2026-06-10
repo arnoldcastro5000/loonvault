@@ -15,9 +15,9 @@ Phase 0 is also the phase most exposed to chicken-and-egg problems: the state bu
 
 ## Solution
 
-Stand up a minimal, fully hardened AWS environment before any application infrastructure is provisioned. The deliverables are: encrypted remote Terraform state with locking, a GitHub OIDC federation role (no long-lived keys), an SCP enforcing `ca-central-1` at the account level, a CI pipeline with Checkov / Semgrep / pip-audit / betterleaks / OPA gates configured, and a CloudTrail baseline covering management events and scoped data events.
+Stand up a minimal, fully hardened AWS environment before any application infrastructure is provisioned. The deliverables are: encrypted remote Terraform state with locking, an SCP enforcing `ca-central-1` at the account level, a CI pipeline with Checkov / Semgrep / pip-audit / betterleaks / OPA gates configured, and a CloudTrail baseline covering management events and scoped data events.
 
-The phase ends with a concrete verification gate: a trivial PR deploys to AWS via OIDC and passes all CI scans; an attempted `us-east-2` resource is blocked by the SCP.
+The phase ends with a concrete verification gate: a trivial PR passes all CI scans with no AWS credentials present in the pipeline; an attempted `us-east-2` resource is blocked by the SCP.
 
 ---
 
@@ -25,18 +25,15 @@ The phase ends with a concrete verification gate: a trivial PR deploys to AWS vi
 
 ### Remote state and bootstrapping
 
-1. As the developer, I want Terraform remote state stored in an S3 bucket encrypted with a CMK and access-controlled to the OIDC role only, so that state cannot be read or modified by unauthorised principals and plaintext secrets in state are protected at rest.
+1. As the developer, I want Terraform remote state stored in an S3 bucket encrypted with a CMK and access-controlled to the developer's IAM Identity Center principals only, so that state cannot be read or modified by unauthorised principals and plaintext secrets in state are protected at rest.
 2. As the developer, I want a DynamoDB table used as a Terraform state lock, so that concurrent `terraform apply` runs cannot corrupt state.
 3. As the developer, I want the S3 state bucket to have versioning enabled, so that a corrupted or accidentally deleted state file can be recovered from a prior version.
 4. As the developer, I want the bootstrap resources (state bucket, lock table) created locally first and then imported into Terraform state, so that the chicken-and-egg dependency is resolved without manual resource management.
 5. As the developer, I want the Terraform backend configuration to use the regional STS endpoint (`sts.ca-central-1.amazonaws.com`), so that state operations do not depend on us-east-1.
 
-### GitHub OIDC authentication
+### GitHub OIDC authentication — removed by decision (2026-06-09)
 
-6. As the developer, I want a GitHub Actions OIDC federation role provisioned in AWS as a portfolio artefact, so that I can demonstrate how CI/CD would be secured if GitHub Actions were ever permitted to deploy — with a scoped trust policy, no long-lived keys, and a regional STS endpoint.
-7. As the developer, I want the OIDC role's trust policy scoped to the specific GitHub repository only (not all of GitHub), so that the demonstrated configuration follows least-privilege even as a non-active artefact.
-8. As the developer, I want the OIDC role's permissions limited to state read and resource describe actions only — no `terraform apply` permissions — so that even if the role were assumed, it could not modify infrastructure.
-9. As the developer, I want the OIDC role to reference the regional STS endpoint (`sts.ca-central-1.amazonaws.com`) in its trust policy, so that the demonstrated configuration avoids the us-east-1 SPOF dependency.
+*(Stories 6–9 covered a GitHub Actions OIDC federation role. The role was cancelled entirely — not even as an inert portfolio artefact. GitHub Actions holds no AWS credentials and no assumable role exists; all Terraform changes originate from the developer's terminal via short-lived IAM Identity Center sessions. The interview story is the deliberate absence of any CI deploy path, not a demonstration role. Numbering of subsequent stories is retained.)*
 
 ### AWS Organizations and SCP
 
@@ -82,7 +79,7 @@ The phase ends with a concrete verification gate: a trivial PR deploys to AWS vi
 40. As the platform, I want CloudTrail data events enabled for the S3 raw-zone bucket (GetObject, PutObject), the KMS CMKs (Decrypt, GenerateDataKey), and Lambda functions (Invoke), scoped to specific ARNs rather than account-wide, so that sensitive data-plane actions are auditable without incurring the cost of full account-wide data event logging.
 41. As the platform, I want CloudTrail logs delivered to a dedicated S3 log bucket with its own CMK encryption and a bucket policy that denies deletion and modification of log objects, so that an attacker who gains access to the account cannot erase their audit trail.
 42. As the platform, I want an EventBridge rule that sends an SNS alert on the first occurrence of `StopLogging`, `DeleteTrail`, or `UpdateTrail`, so that any attempt to disable or tamper with the audit trail is immediately visible — even before the full detection pipeline is built in Phase 3.
-43. As the developer, I want CloudWatch Logs retention on all log groups set to 2 years, so that the retention period meets Protected B operational standards even though the current data is unclassified.
+43. As the developer, I want CloudWatch Logs retention on all log groups set to 2 years, so that the retention period meets Protected B operational standards, matching the Protected B classification applied to all LoonVault data from day one.
 
 ### Phase 0 verification gate
 
@@ -97,11 +94,11 @@ The phase ends with a concrete verification gate: a trivial PR deploys to AWS vi
 
 - AWS Organizations must be enabled manually before any Terraform work begins — even a single-account org requires the service to be active before SCPs can be created. This is a Phase 0 prerequisite, not a Terraform resource. Import the org and root into Terraform state after enabling.
 - The S3 state bucket and DynamoDB lock table must be created with a local backend first, then the backend block changed to `s3` and `terraform init -migrate-state` run. This is a one-time manual step; document it in the repo README so it is reproducible.
-- Order of apply: (1) bootstrap module (state bucket, lock table, OIDC role) with local backend → (2) migrate to remote state → (3) org/SCP module → (4) KMS module → (5) CloudTrail module. Each step depends on the prior completing cleanly.
+- Order of apply: (1) bootstrap module (state bucket, lock table) with local backend → (2) migrate to remote state → (3) org/SCP module → (4) KMS module → (5) CloudTrail module. Each step depends on the prior completing cleanly.
 
 ### Terraform module structure
 
-- **`bootstrap/`**: S3 state bucket (CMK-encrypted, versioned), DynamoDB lock table, GitHub OIDC provider, OIDC federation role. Applied once locally; all subsequent work uses remote state.
+- **`bootstrap/`**: S3 state bucket (CMK-encrypted, versioned), DynamoDB lock table. Applied once locally; all subsequent work uses remote state. No GitHub OIDC provider or role — CI holds no AWS credentials.
 - **`org/`**: AWS Organizations import, SCP resource (`aws_organizations_policy` + `aws_organizations_policy_attachment`). SCP denies all regions except `ca-central-1`, with explicit exceptions for IAM/STS/CloudFront (global services).
 - **`kms/`**: three CMK resources (S3, RDS, Secrets Manager), key policies, aliases. Outputs CMK ARNs for consumption by later modules.
 - **`cloudtrail/`**: CloudTrail trail, S3 log bucket (separate CMK, deletion-deny bucket policy), EventBridge rule for trail-tampering alert, SNS topic, CloudWatch log group (2-year retention).
@@ -115,9 +112,9 @@ Phase 0 OPA policies cover the infrastructure provisioned in this phase:
 - All resources must be in `ca-central-1` (belt-and-suspenders alongside the SCP — OPA catches it at plan time, SCP at apply time).
 Policies covering SG ingress and RDS encryption are written in Phase 0 but only fire when those resource types are introduced in Phase 1.
 
-### OIDC role permissions
+### No CI deploy path (OIDC role removed)
 
-The OIDC role is a portfolio artefact demonstrating how CI deployment would be secured — it is not used by the active pipeline. Its permissions are read-only: `s3:GetObject`, `s3:ListBucket` on the state bucket; `dynamodb:GetItem` on the lock table; and describe-level actions on AWS resources (no write, no apply). GitHub Actions carries no credentials and never assumes this role. The developer applies infrastructure locally using their own AWS credentials (IAM user or IAM Identity Center). The OIDC role's value is demonstrating the correct trust policy shape (repo-scoped, regional STS endpoint) to an interviewer.
+GitHub Actions carries no AWS credentials and no assumable role exists — the OIDC federation role was cancelled by decision (2026-06-09), not even retained as an inert artefact. The developer applies infrastructure locally using short-lived IAM Identity Center sessions. The interview value is the posture itself: a compromised Action or workflow has no path to AWS, eliminating the credential-theft class of CI supply-chain attacks rather than mitigating it.
 
 ### CloudTrail log bucket vs application log bucket
 
@@ -125,7 +122,7 @@ The CloudTrail log bucket is a separate resource from the S3 raw-zone bucket (pr
 
 ### Regional STS endpoint
 
-`sts.ca-central-1.amazonaws.com` must be explicitly set in: (1) the OIDC role trust policy's `sts:ExternalId` condition, (2) the AWS provider `sts_region` argument in Terraform, and (3) any SDK configuration in later Lambda functions. Default STS endpoints route through us-east-1; without this, a us-east-1 outage can break credential issuance even for a fully `ca-central-1`-resident stack.
+`sts.ca-central-1.amazonaws.com` must be explicitly set in: (1) the AWS provider `sts_region` argument in Terraform, and (2) any SDK configuration in later Lambda functions. Default STS endpoints route through us-east-1; without this, a us-east-1 outage can break credential issuance even for a fully `ca-central-1`-resident stack.
 
 ---
 
@@ -245,4 +242,4 @@ No prior art for tests exists in the repo yet — Seam 1 (OPA/Conftest) establis
 - **AWS Organizations is the single most likely blocker**: enabling it is a console-only action that can take several minutes to propagate. Do not start Terraform work until the org is confirmed active and the management account root is importable.
 - **State bucket CMK dependency**: the CMK for state bucket encryption must exist before the bucket is created. In the bootstrap module, create the CMK first; reference its ARN in the bucket resource. Terraform handles this within a single `apply` if the dependency is expressed via resource reference (not hardcoded ARN).
 - **CI gate ordering**: gitleaks must run before any AWS-touching step in the pipeline — a secret committed alongside an IaC change should be caught before credentials are used.
-- **Phase 0 understanding gate** (from plan.md): before starting Phase 1, be able to answer without notes — why OIDC federation is safer than long-lived keys; why remote state must be encrypted and locked; what each CI gate catches and its limits; what CloudTrail management vs data events are; why the SCP matters even when all resources are intentionally in `ca-central-1`.
+- **Phase 0 understanding gate** (from plan.md): before starting Phase 1, be able to answer without notes — why CI holds no AWS credentials at all and what a compromised Action can and cannot reach as a result; why remote state must be encrypted and locked; what each CI gate catches and its limits; what CloudTrail management vs data events are; why the SCP matters even when all resources are intentionally in `ca-central-1`.

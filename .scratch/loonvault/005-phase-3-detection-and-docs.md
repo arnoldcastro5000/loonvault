@@ -23,7 +23,7 @@ Phase 3 delivers two parallel workstreams:
 
 **Documentation and evidence**: author every documentation deliverable — STRIDE threat model, security controls inventory, OSFI B-13/E-23 mapping matrix, GC Cloud Guardrails mapping matrix, data classification exercise, incident response plan, cloud exit strategy, third-party sub-service register (finalised), architecture diagram, and README. Run Prowler against the deployed stack, remediate all Critical and High findings, and capture the report as a repo artefact. Populate the frontend Posture and Compliance sections with the authored content.
 
-Phase 3 verification gate: Prowler produces a report with no unacknowledged Critical/High findings; a test event triggers an end-to-end detection alert; all five Posture and Compliance pages have real content.
+Phase 3 verification gate: Prowler produces a report with no unacknowledged Critical/High findings; a test event triggers an end-to-end detection alert; all four Posture and Compliance sub-pages have real content.
 
 ---
 
@@ -125,7 +125,7 @@ Phase 3 verification gate: Prowler produces a report with no unacknowledged Crit
 
 42. As the developer, I want the Prowler scan to complete with a report saved to `docs/prowler/` and no unacknowledged Critical or High findings, so that the compliance claim is machine-evidenced before the Phase 3 build is called complete.
 43. As the developer, I want to trigger a test event for each of the five new detection rules and confirm an SNS alert email is received for each within 60 seconds, so that the end-to-end detection path (CloudTrail event → EventBridge → SNS → email) is verified working and not assumed.
-44. As the developer, I want all five Posture and Compliance sub-pages to display real authored content (no placeholders), so that the always-on portfolio face is complete before Phase 4 begins.
+44. As the developer, I want all four Posture and Compliance sub-pages (Threat Model, Security Controls, OSFI, GC Cloud Guardrails) to display real authored content (no placeholders), so that the always-on portfolio face is complete before Phase 4 begins.
 45. As the developer, I want all CI gates (`just --fmt --check`, Checkov, betterleaks, Semgrep, pip-audit, `npm audit`, Ruff, ESLint, tflint, regal, actionlint, Socket.dev, zizmor, Dependency Review, `terraform validate`) to pass on every push and PR, and the pre-push OPA/Conftest hook to pass against the Phase 3 `terraform plan` output, so that detection rule infrastructure and any TypeScript content changes are verified clean before `just apply` is run from the terminal.
 
 ---

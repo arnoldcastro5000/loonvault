@@ -243,7 +243,7 @@ Run against ephemeral stack only — not in CI.
 - **Additional Series beyond CPI** — Phase 2 (M2, CAD/USD, overnight rate, bond yields, BCPI). The schema and pipeline are designed to accommodate them; only CPI is wired.
 - **Pressure Metrics** — Phase 2. The `series_observations` table schema is wide enough for them from the start, but no Pressure Metric is computed in Phase 1.
 - **Admin plane and Cloudflare Access** — Phase 2. The Lambda authorizer in Phase 1 validates the origin secret only; the CF Access JWT validation is not wired.
-- **Frontend** — Phase 2 or later. The API is callable from a browser (CORS headers present) but no Cloudflare Pages site is deployed.
+- **Frontend** — Phase 2 or later. The API is callable from a browser (CORS headers present) but no frontend site is deployed.
 - **Full detection pipeline** — Phase 3. VPC Flow Logs are enabled in Phase 1 (low cost, high future value) but detection rules beyond the CloudTrail-disabled alert from Phase 0 are not wired.
 - **Pressure Metric RDS table** — out of scope (single `series_observations` table handles both tiers per the schema decision above).
 - **Multi-AZ RDS** — budget constraint, documented as production upgrade path.

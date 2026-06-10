@@ -63,7 +63,7 @@ The **AI** actor is a force-multiplier on OE and TE: published code that would r
 [GitHub Actions] ── no AWS creds ──▶ static scans only (PUBLIC REPO)
 [Developer Terminal] ── IAM Identity Center ──▶ terraform apply / destroy
 [Terraform State] ── S3 + DynamoDB lock · CMK encrypted
-[Cloudflare Pages] ── S3 static frontend · ca-central-1
+[Frontend] ── S3 static site (REST endpoint) · ca-central-1 · Cloudflare proxy
 ```
 
 **Trust boundaries:** Cloudflare edge / API Gateway; VPC perimeter (Ingest Lambda is outside); Lambda execution role boundary; Postgres role boundary; Secrets Manager resource policy boundary; S3 bucket policy boundary.
@@ -265,7 +265,7 @@ The **AI** actor is a force-multiplier on OE and TE: published code that would r
 | T-042 | T | OPA/Checkov logic gap exploited using published policy knowledge to craft bypassing Terraform | TE AI | 7 | 4 | 5 | 6 | 9 | **6.2** | High |
 | T-043 | T | GitHub Actions script injection via untrusted input in `run:` step | SC | 6 | 3 | 3 | 5 | 5 | **4.4** | Medium |
 
-**Mitigating controls:** pip-audit (Python CVEs), `npm audit` (Node CVEs), Socket.dev (supply chain behaviour analysis), Dependency Review (PR-time), Dependabot (daily updates); SHA-pinned Actions (immutable commit SHAs); zizmor (workflow security — script injection, `pull_request_target`); betterleaks + gitleaks (secret scanning); IAM Identity Center issues short-lived session tokens; devcontainer network-isolated from AWS credentials; OPA + Checkov + tflint + Semgrep in CI; regal lints Rego policies; Semgrep `p/owasp-top-ten` covers injection patterns.
+**Mitigating controls:** pip-audit (Python CVEs), `npm audit` (Node CVEs), Socket.dev (supply chain behaviour analysis), Dependency Review (PR-time), Dependabot (daily updates); SHA-pinned Actions (immutable commit SHAs); zizmor (workflow security — script injection, `pull_request_target`); betterleaks + gitleaks + TruffleHog (secret scanning); IAM Identity Center issues short-lived session tokens; devcontainer network-isolated from AWS credentials; OPA + Checkov + tflint + Semgrep in CI; regal lints Rego policies; Semgrep `p/owasp-top-ten` covers injection patterns.
 
 **Gap — T-042:** Di raised to 9 from 4 — the published OPA policies and Checkov configuration fully specify what is and is not blocked. An attacker (or AI-enhanced scanner) can read the exact Rego rules and craft a Terraform configuration that passes every policy check while still introducing a misconfiguration outside the rules' scope. This raises T-042 from Medium to High. Every gap in the OPA rule set is visible to the attacker. Mitigation: regal lints Rego policies for correctness; Prowler catches post-deploy drift that OPA misses; regular policy review as architecture evolves.
 
@@ -280,7 +280,7 @@ The **AI** actor is a force-multiplier on OE and TE: published code that would r
 | T-044 | I | Terraform state read exposes full infrastructure topology (ARNs, resource IDs, config) | TE MI | 6 | 2 | 3 | 4 | 3 | **3.6** | Low |
 | T-045 | T | Terraform state modified to destroy or drift critical resources | MI | 9 | 2 | 4 | 8 | 3 | **5.2** | Medium |
 
-**Mitigating controls:** State bucket CMK-encrypted; access restricted to OIDC federation role (read-only) and developer Identity Center session; Block Public Access; S3 versioning; DynamoDB lock table prevents concurrent modification; CloudTrail S3 data events on state bucket.
+**Mitigating controls:** State bucket CMK-encrypted; access restricted to the developer's IAM Identity Center session (no CI principal has access); Block Public Access; S3 versioning; DynamoDB lock table prevents concurrent modification; CloudTrail S3 data events on state bucket.
 
 ---
 
@@ -291,7 +291,7 @@ The **AI** actor is a force-multiplier on OE and TE: published code that would r
 | T-046 | T | Frontend static content tampered — defacement or XSS payload injected into pages | TE MI | 7 | 4 | 5 | 5 | 5 | **5.2** | Medium |
 | T-047 | D | Frontend S3 bucket unavailable; static site unreachable | — | 5 | 2 | 1 | 6 | 4 | **3.6** | Low |
 
-**Mitigating controls:** Frontend deployed only via `just deploy-frontend` from developer terminal (no CI write access); Cloudflare CDN caches frontend content (1-hour TTL) — site remains available during short S3 outages; Semgrep + ESLint (`eslint-plugin-security`) catch XSS patterns in Next.js components; React's built-in DOM escaping prevents most XSS if no `dangerouslySetInnerHTML` is used; S3 Block Public Access; Cloudflare WAF in front.
+**Mitigating controls:** Frontend deployed only via `just deploy-frontend` from developer terminal (no CI write access); Cloudflare CDN caches frontend content (1-hour TTL) — site remains available during short S3 outages; Semgrep + ESLint (`eslint-plugin-security`) catch XSS patterns in Next.js components; React's built-in DOM escaping prevents most XSS if no `dangerouslySetInnerHTML` is used; bucket policy grants anonymous read-only `s3:GetObject` with no public write or list (Block Public Access is deliberately *not* enabled on this bucket — unlike the raw-zone and state buckets — because the Cloudflare-proxied REST endpoint requires public object reads); Cloudflare WAF in front.
 
 ---
 
@@ -372,7 +372,7 @@ These threats arise specifically from the public posture: full code publication 
 | **3.6** | Low | T-044 | I | Terraform state exposes infrastructure topology |
 | **3.6** | Low | T-047 | D | Frontend S3 unavailable |
 
-**Score distribution:** 0 Critical · 12 High · 32 Medium · 7 Low (51 threats)
+**Score distribution:** 0 Critical · 12 High · 34 Medium · 5 Low (51 threats)
 
 No Critical findings. The three new threats introduced by the public posture (T-048, T-049, T-050) all score High — they represent genuine elevated risk from publication but are mitigated by the principle that the controls are designed to work even when fully described.
 

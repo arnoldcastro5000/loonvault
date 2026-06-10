@@ -1,6 +1,6 @@
 # LoonVault
 
-A security proof-of-concept and portfolio project, built to demonstrate bank-grade cloud security for a financial-services cloud-security specialist role. The data is payload, not the point: a public API serving Bank of Canada economic data gives the project real infrastructure worth securing. All engineering effort is directed at the security story — defense-in-depth architecture, a STRIDE threat model mapped to OSFI B-13 / E-23, and live attack-and-defense demonstrations. The backend is ephemeral (`terraform apply` before interviews, `terraform destroy` after); the Cloudflare Pages frontend is always-on.
+A security proof-of-concept and portfolio project, built to demonstrate bank-grade cloud security for a financial-services cloud-security specialist role. The data is payload, not the point: a public API serving Bank of Canada economic data gives the project real infrastructure worth securing. All engineering effort is directed at the security story — defense-in-depth architecture, a STRIDE threat model mapped to OSFI B-13 / E-23, and live attack-and-defense demonstrations. The backend is ephemeral (`terraform apply` before interviews, `terraform destroy` after); the frontend — a static site on S3 served through the Cloudflare proxy — is always-on.
 
 ## Language
 

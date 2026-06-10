@@ -25,7 +25,7 @@ attack-&-defense demonstrations.
 | Security spine | Threat model (STRIDE) + **OSFI B-13** primary (Technology and Cyber Risk) + **OSFI E-23** (Third-Party Risk) + **GC Cloud Guardrails** secondary (prescriptive verification layer, Prowler-verified) + **CIS Benchmarks** |
 | Identity | Tiered: public rate-limited reads + admin plane behind **Cloudflare Access** (Zero-Trust + MFA) |
 | Detection | Free-native + OSS (CloudTrail, Flow Logs, EventBridge→CloudWatch→SNS, Prowler) + short paid bursts |
-| CI/CD | GitHub Actions + public repo; **CI = static scans only** (`terraform fmt`, `terraform validate`, Checkov, betterleaks, Semgrep (SAST), pip-audit (Python SCA), `npm audit` (frontend SCA), `just --fmt --check` (Justfile syntax), Socket.dev (supply chain), zizmor (Actions workflow security), Dependency Review (PR-time), Ruff (Python linter), ESLint/`next lint` (TypeScript linter), tflint + AWS ruleset (Terraform linter), regal (Rego linter), actionlint (Actions correctness) — no AWS credentials, every push/PR). **Dependabot**: daily PRs for `pip`, `npm`, `github-actions` dependencies. **Local hooks**: gitleaks pre-commit; OPA/Conftest pre-push. **`just apply` = terminal-only** (wraps `terraform apply`); `just deploy-frontend` for frontend. OIDC role = portfolio artefact only. |
+| CI/CD | GitHub Actions + public repo; **CI = static scans only** (`terraform fmt`, `terraform validate`, Checkov, betterleaks, TruffleHog (verified credentials + AWS account IDs), Semgrep (SAST), pip-audit (Python SCA), `npm audit` (frontend SCA), `just --fmt --check` (Justfile syntax), Socket.dev (supply chain), zizmor (Actions workflow security), Dependency Review (PR-time), Ruff (Python linter), ESLint/`next lint` (TypeScript linter), tflint + AWS ruleset (Terraform linter), regal (Rego linter), actionlint (Actions correctness) — no AWS credentials, every push/PR). **Dependabot**: daily PRs for `pip`, `npm`, `github-actions` dependencies. **Local hooks**: gitleaks pre-commit; OPA/Conftest pre-push. **`just apply` = terminal-only** (wraps `terraform apply`); `just deploy-frontend` for frontend. No GitHub OIDC role — GitHub Actions never holds AWS credentials; all Terraform changes originate from the developer's terminal. |
 | Data | BoC Valet — rates, FX, CPI/core inflation, BCPI (single source) |
 | Keys / account / frontend | Customer-managed **KMS CMKs** (S3 + RDS + Secrets Manager); single account (multi-account documented as tradeoff); **Next.js/TypeScript static site on S3** (REST endpoint, `ca-central-1`), Cloudflare CDN/WAF/DDoS in front |
 | Domains | API: `api-loonvault.cloudsecuritypractice.com` → Cloudflare → API Gateway. Frontend: `loonvault.cloudsecuritypractice.com` → Cloudflare → S3 REST endpoint. Cloudflare Access team domain: `loonvault.cloudflareaccess.com` |
@@ -65,7 +65,8 @@ public keys at `https://loonvault.cloudflareaccess.com/cdn-cgi/access/certs`).
 (Each maps to a threat in the model and an OSFI B-13 principle — so the attack demos double as evidence.)
 
 - **Identity:** tiered access; least-privilege IAM role per Lambda (exact actions only — no
-  wildcards); OIDC for CI (no long-lived keys); MFA enforced on admin plane; CF Access JWT
+  wildcards); CI holds no AWS credentials (applies are terminal-only via short-lived IAM
+  Identity Center sessions); MFA enforced on admin plane; CF Access JWT
   validated at origin by Lambda authorizer.
 - **Network:** VPC, private subnets for RDS + Transform/Read Lambdas; security groups
   (RDS SG ingress is SG-to-SG only — no CIDR blocks, enforced by OPA policy); gateway VPC
@@ -82,11 +83,15 @@ public keys at `https://loonvault.cloudflareaccess.com/cdn-cgi/access/certs`).
   Terraform state.
 - **Database:** least-privilege Postgres roles — Read Lambda connects as `role_reader`
   (`SELECT` only on specific tables); Transform Lambda connects as `role_writer`
-  (`INSERT`/`UPDATE` only). Neither can `DROP`, `TRUNCATE`, or access the other's schema.
+  (`INSERT`/`UPDATE` only) in Phase 1, upgraded to `role_transformer`
+  (`SELECT`/`INSERT`/`UPDATE` on `series_observations` only) in Phase 2 — read access is
+  required to compute Pressure Metrics from stored Series. `role_writer` is retained for
+  future write-only consumers. No role can `DROP`, `TRUNCATE`, `DELETE`, or access another
+  role's schema.
 - **Detection/response:** CloudTrail (management events + data events scoped to S3 raw-zone,
   KMS CMKs, Lambda functions); VPC Flow Logs; six detection rules (see Detection Pipeline);
   Prowler compliance scans; auto-remediation (stretch).
-- **Governance / shift-left:** Terraform + Checkov + tflint (Terraform correctness) + Semgrep (SAST) + Ruff (Python linter) + ESLint/`next lint` (TypeScript linter) + regal (Rego linter) + pip-audit (Python SCA) + `npm audit` (frontend SCA) + Socket.dev (supply chain) + zizmor (Actions workflow security) + actionlint (Actions correctness) + Dependency Review (PR-time) + Dependabot (automated updates) + betterleaks (CI) + gitleaks (pre-commit) + OPA (pre-push hook); remote state
+- **Governance / shift-left:** Terraform + Checkov + tflint (Terraform correctness) + Semgrep (SAST) + Ruff (Python linter) + ESLint/`next lint` (TypeScript linter) + regal (Rego linter) + pip-audit (Python SCA) + `npm audit` (frontend SCA) + Socket.dev (supply chain) + zizmor (Actions workflow security) + actionlint (Actions correctness) + Dependency Review (PR-time) + Dependabot (automated updates) + betterleaks + TruffleHog + gitleaks (CI secret scanning) + gitleaks (pre-commit) + OPA (pre-push hook); remote state
   encrypted + locked; OPA enforces LoonVault-specific invariants (e.g. RDS SG ingress must be
   SG-to-SG, never CIDR) — policy covers both `aws_security_group` (inline ingress blocks) and
   `aws_security_group_rule` (standalone rule resources). OPA cannot catch post-deploy drift —
@@ -157,11 +162,11 @@ July 1, 2025).
 
 | Domain | Principle | LoonVault control |
 |---|---|---|
-| **Cyber Security** | Identity & access management | Cloudflare Access + MFA; CF Access JWT validated at origin; least-privilege IAM role per Lambda; OIDC for CI |
+| **Cyber Security** | Identity & access management | Cloudflare Access + MFA; CF Access JWT validated at origin; least-privilege IAM role per Lambda; credential-less CI (terminal-only applies via short-lived Identity Center sessions) |
 | **Cyber Security** | Data security (at rest) | CMK on S3, RDS, Secrets Manager; automatic annual key rotation; key management procedure documented |
 | **Cyber Security** | Data security (in transit) | TLS 1.2 at every hop; Cloudflare Full-strict; `sslmode=verify-full`; `ssl_min_protocol_version=TLSv1.2` |
 | **Cyber Security** | Infrastructure security | VPC private subnets; SG-to-SG ingress only (OPA enforced); gateway VPC endpoints; SCP enforces `ca-central-1` |
-| **Cyber Security** | Threat & vulnerability management | OPA (pre-push hook) + Checkov + Semgrep (SAST) + pip-audit (SCA) + betterleaks in CI; gitleaks pre-commit; Prowler post-deploy scans; SHA-pinned Actions |
+| **Cyber Security** | Threat & vulnerability management | OPA (pre-push hook) + Checkov + Semgrep (SAST) + pip-audit (SCA) + betterleaks + TruffleHog in CI; gitleaks pre-commit; Prowler post-deploy scans; SHA-pinned Actions |
 | **Cyber Security** | Security monitoring & response | CloudTrail (management + data events); 6 EventBridge/CloudWatch detection rules; incident response plan |
 | **Technology Operations** | Change management | IaC (Terraform); CI pipeline gates; Secrets Manager automatic rotation |
 | **Governance** | Risk identification & assessment | STRIDE threat model; data classification exercise (Protected B-ready) |
@@ -197,10 +202,10 @@ Each phase leaves a deployable, secure thing — stop at any phase and still hav
 
 - **Phase 0 — Secure foundation:**
   - *Prerequisite:* Enable AWS Organizations; import into Terraform state.
-  - Terraform remote state (encrypted S3 + DynamoDB lock), GitHub OIDC role (regional STS
-    endpoint), SCP to enforce `ca-central-1`, CI with Checkov/Semgrep/pip-audit/betterleaks/OPA (pre-push hook)/gitleaks (pre-commit), CloudTrail +
+  - Terraform remote state (encrypted S3 + DynamoDB lock), SCP to enforce `ca-central-1`,
+    CI with Checkov/Semgrep/pip-audit/betterleaks/OPA (pre-push hook)/gitleaks (pre-commit), CloudTrail +
     logging baseline (management events + KMS/S3/Lambda data events).
-  → *Verify: a trivial PR deploys via OIDC and is scanned; SCP blocks a `us-east-2` resource.*
+  → *Verify: a trivial PR passes every CI scan with no AWS credentials present; SCP blocks a `us-east-2` resource.*
 
 - **Phase 1 — Vertical slice:** one series → S3 raw → RDS → one public `GET`, fully secured.
   Includes: shared-secret header on API GW, `sslmode=verify-full` + RDS CA bundle, least-
@@ -211,7 +216,7 @@ Each phase leaves a deployable, secure thing — stop at any phase and still hav
   plane (Lambda authorizer validates shared secret + CF Access JWT).
   → *Verify: admin action blocked without Access; direct API GW URL returns 403.*
 
-- **Phase 3 — Detection + docs:** all five detection rules live, Prowler, threat-model doc,
+- **Phase 3 — Detection + docs:** the five remaining detection rules live (all six active), Prowler, threat-model doc,
   OSFI B-13 / E-23 mapping matrix.
   → *Verify: Prowler report produced + a triggered alert.*
 
@@ -228,11 +233,13 @@ because security interviews deep-dive exactly here. Do not advance a phase until
 answer its questions out loud, unaided.
 
 **Phase 0 — Secure foundation**
-- [ ] Why OIDC federation is safer than long-lived IAM access keys — the GitHub→STS token
-      exchange, the trust policy, and why short-lived credentials shrink the blast radius.
+- [ ] Why CI holds no AWS credentials at all (terminal-only applies via short-lived IAM
+      Identity Center sessions) — what a compromised Action can and cannot reach as a result,
+      and why this beats both long-lived IAM keys *and* OIDC-federated CI deploys for a
+      single-developer project.
 - [ ] Why Terraform remote state must be encrypted, access-controlled, and locked — what
       sensitive values land in state in plaintext, and what the DynamoDB lock prevents.
-- [ ] What each gate catches *and its limits*: Checkov (IaC misconfig), Semgrep (Python SAST via `p/python`: injection, weak crypto, insecure patterns; TypeScript/React SAST via `p/typescript` + `p/react`: XSS, `dangerouslySetInnerHTML`, `eval()`, prototype pollution; cross-language via `p/owasp-top-ten`), pip-audit (Python dependency CVEs), `npm audit` (frontend JS/TS dependency CVEs), Socket.dev (supply chain risks beyond CVEs: typosquatting, install scripts, maintainer takeovers), zizmor (GitHub Actions workflow security: script injection, `pull_request_target` misuse, overly broad permissions), Dependency Review (newly introduced vulnerable deps on each PR), Dependabot (automated daily dependency update PRs — keeps SHA-pinned Actions current), gitleaks pre-commit (secrets before commit), betterleaks CI (secrets that slipped through), OPA pre-push hook (LoonVault-specific invariants against plan JSON),
+- [ ] What each gate catches *and its limits*: Checkov (IaC misconfig), Semgrep (Python SAST via `p/python`: injection, weak crypto, insecure patterns; TypeScript/React SAST via `p/typescript` + `p/react`: XSS, `dangerouslySetInnerHTML`, `eval()`, prototype pollution; cross-language via `p/owasp-top-ten`), pip-audit (Python dependency CVEs), `npm audit` (frontend JS/TS dependency CVEs), Socket.dev (supply chain risks beyond CVEs: typosquatting, install scripts, maintainer takeovers), zizmor (GitHub Actions workflow security: script injection, `pull_request_target` misuse, overly broad permissions), Dependency Review (newly introduced vulnerable deps on each PR), Dependabot (automated daily dependency update PRs — keeps SHA-pinned Actions current), gitleaks pre-commit (secrets before commit), betterleaks + TruffleHog in CI (secrets that slipped through), OPA pre-push hook (LoonVault-specific invariants against plan JSON),
       OPA/conftest (LoonVault-specific invariants Checkov cannot express), and the five linters
       — Ruff (Python), ESLint/`next lint` (TypeScript/React), tflint (Terraform AWS correctness),
       regal (Rego), actionlint (Actions) — plus `just --fmt --check` (Justfile syntax), which catch
@@ -380,9 +387,9 @@ answer its questions out loud, unaided.
      SDK cache TTL (~1hr). Accepted residual risk.
 5. **us-east-1 dependency:** IAM control plane routes through us-east-1. Mitigated by regional
    STS endpoint. Documented as an infrastructure dependency outside our control.
-6. **GitHub Actions supply chain risk:** OIDC eliminates long-lived AWS credentials in GitHub
-   secrets, but a compromised third-party Action running in the same workflow runner can read
-   temporary session credentials from process memory. Real precedents: GhostAction (Sep 2025,
+6. **GitHub Actions supply chain risk:** CI carries no AWS credentials at all, so a
+   compromised third-party Action cannot reach AWS infrastructure — but it can still tamper
+   with the runner, exfiltrate the `GITHUB_TOKEN`, or poison artifacts. Real precedents: GhostAction (Sep 2025,
    3,325 secrets stolen), tj-actions/changed-files (Mar 2025, 23,000+ repos, AWS keys
    exposed), Trivy-Action (Mar 2026, 10,000+ workflows). Mitigated by pinning all Actions to
    commit SHAs. Residual risk: a zero-day compromise of a pinned SHA is undetectable without
