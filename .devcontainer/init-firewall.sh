@@ -25,10 +25,14 @@ else
 fi
 
 # Allow DNS, localhost, and SSH before applying restrictions
-iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
-iptables -A INPUT -p udp --sport 53 -j ACCEPT
-iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
-iptables -A INPUT -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
+# Lock DNS to a specific resolver only
+iptables -A OUTPUT -p udp --dport 53 -d 10.255.255.254 -j ACCEPT
+iptables -A OUTPUT -p udp --dport 53 -j DROP
+iptables -A INPUT -p udp --sport 53 -s 10.255.255.254 -j ACCEPT
+
+#iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
+#iptables -A INPUT -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
+
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 
@@ -73,9 +77,6 @@ for domain in \
     "registry.npmjs.org" \
     "api.anthropic.com" \
     "downloads.claude.ai" \
-    "marketplace.visualstudio.com" \
-    "vscode.blob.core.windows.net" \
-    "update.code.visualstudio.com" \
     ${extra_domains[@]+"${extra_domains[@]}"}; do
     echo "Resolving $domain..."
     ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
