@@ -55,6 +55,9 @@ lambdas/**/*.zip
 lambdas/**/package/
 lambdas/layers/rds-ca/rds-ca-bundle.pem
 
+# Gitleaks rule test fixtures (contain fake account ids)
+.gitleaks-test/
+
 # Misc
 .DS_Store
 *.swp
