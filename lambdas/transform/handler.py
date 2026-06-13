@@ -16,7 +16,6 @@ _s3 = None
 _secrets = None
 _db_conn = None
 
-RAW_BUCKET = os.environ["RAW_BUCKET"]
 SNAPSHOTS_BUCKET = os.environ["SNAPSHOTS_BUCKET"]
 DB_HOST = os.environ["DB_HOST"]
 DB_NAME = os.environ["DB_NAME"]

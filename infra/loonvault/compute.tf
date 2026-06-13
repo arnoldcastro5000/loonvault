@@ -163,10 +163,10 @@ resource "aws_lambda_function" "transform" {
 
   environment {
     variables = {
-      DB_HOST            = aws_db_instance.main.address
-      DB_NAME            = var.db_name
-      DB_CREDENTIALS_ARN = aws_secretsmanager_secret.db_credentials.arn
-      SNAPSHOTS_BUCKET   = aws_s3_bucket.snapshots.id
+      DB_HOST          = aws_db_instance.main.address
+      DB_NAME          = var.db_name
+      DB_SECRET_ARN    = aws_secretsmanager_secret.db_credentials.arn
+      SNAPSHOTS_BUCKET = aws_s3_bucket.snapshots.id
     }
   }
 
@@ -214,9 +214,9 @@ resource "aws_lambda_function" "read" {
 
   environment {
     variables = {
-      DB_HOST            = aws_db_instance.main.address
-      DB_NAME            = var.db_name
-      DB_CREDENTIALS_ARN = aws_secretsmanager_secret.db_credentials.arn
+      DB_HOST       = aws_db_instance.main.address
+      DB_NAME       = var.db_name
+      DB_SECRET_ARN = aws_secretsmanager_secret.db_credentials.arn
     }
   }
 
