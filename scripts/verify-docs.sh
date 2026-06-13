@@ -54,7 +54,7 @@ CI_JOBS=$(awk '/^jobs:/{p=1} p && /^  [a-zA-Z]/{count++} END{print count}' \
 check "CI job count" "$CI_JOBS" "6"
 
 UNPINNED=$(grep -E '^\s+uses:\s+' .github/workflows/ci.yml \
-  | grep -v '@[0-9a-f]\{40\}' \
+  | { grep -v '@[0-9a-f]\{40\}' || true; } \
   | wc -l | tr -d ' ')
 check "all Actions SHA-pinned (no bare @vX.Y.Z)" "$UNPINNED" "0"
 

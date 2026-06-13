@@ -49,7 +49,7 @@ loonvault-destroy:
 # Initialise loonvault Postgres schema (run once after loonvault-apply)
 # Requires RDS connectivity — run from a host with VPC access or via bastion
 loonvault-db-init RDS_ENDPOINT DB_NAME="loonvault" DB_USER="loonvault_admin":
-    psql "host={{RDS_ENDPOINT}} dbname={{DB_NAME}} user={{DB_USER}} sslmode=verify-full" \
+    psql "host={{ RDS_ENDPOINT }} dbname={{ DB_NAME }} user={{ DB_USER }} sslmode=verify-full" \
          -f scripts/db-init.sql
 
 # Format all Terraform files in-place
