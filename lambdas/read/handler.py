@@ -10,37 +10,42 @@ import psycopg2
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-_secrets = None
+_rds = None
 _db_conn = None
 
 DB_HOST = os.environ["DB_HOST"]
 DB_NAME = os.environ["DB_NAME"]
-DB_SECRET_ARN = os.environ["DB_SECRET_ARN"]
+DB_USER = os.environ["DB_USER"]
+DB_PORT = int(os.environ.get("DB_PORT", "5432"))
 DB_SSL_CERT = os.environ.get("DB_SSL_CERT", "/opt/rds-ca-bundle.pem")
 DEFAULT_LIMIT = 90
 MAX_LIMIT = 365
 
 
-def _secrets_client():
-    global _secrets
-    if _secrets is None:
-        _secrets = boto3.client("secretsmanager")
-    return _secrets
+def _rds_client():
+    global _rds
+    if _rds is None:
+        _rds = boto3.client("rds")
+    return _rds
 
 
 def _get_db_conn():
     global _db_conn
     if _db_conn and not _db_conn.closed:
         return _db_conn
-    secret = json.loads(
-        _secrets_client().get_secret_value(SecretId=DB_SECRET_ARN)["SecretString"]
+    # RDS IAM auth: token is signed locally (SigV4) from the execution-role credentials —
+    # no Secrets Manager call, no network round-trip. Valid 15 min; only needed at connect.
+    token = _rds_client().generate_db_auth_token(
+        DBHostname=DB_HOST,
+        Port=DB_PORT,
+        DBUsername=DB_USER,
     )
     _db_conn = psycopg2.connect(
         host=DB_HOST,
-        port=5432,
+        port=DB_PORT,
         dbname=DB_NAME,
-        user=secret["reader_username"],
-        password=secret["reader_password"],
+        user=DB_USER,
+        password=token,
         sslmode="verify-full",
         sslrootcert=DB_SSL_CERT,
     )

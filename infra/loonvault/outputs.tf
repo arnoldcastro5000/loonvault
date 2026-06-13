@@ -24,11 +24,6 @@ output "rds_endpoint" {
   sensitive   = true
 }
 
-output "db_credentials_secret_arn" {
-  description = "Secrets Manager ARN for application DB credentials — set after db-init"
-  value       = aws_secretsmanager_secret.db_credentials.arn
-}
-
 output "kms_key_arn" {
   description = "Shared CMK ARN (ADR-0005)"
   value       = aws_kms_key.main.arn

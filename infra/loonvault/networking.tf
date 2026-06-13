@@ -74,16 +74,8 @@ resource "aws_default_security_group" "default" {
 }
 
 # ── Security groups ───────────────────────────────────────────────────────────
-# VPC endpoints SG — accepts HTTPS from Lambda SG
-resource "aws_security_group" "vpc_endpoints" {
-  name        = "${local.name_prefix}-vpc-endpoints"
-  description = "Allow HTTPS from Lambda SG to interface VPC endpoints"
-  vpc_id      = aws_vpc.main.id
-
-  tags = { Name = "${local.name_prefix}-vpc-endpoints" }
-}
-
-# Lambda SG — egress to RDS and VPC endpoints; no ingress
+# Lambda SG — egress to RDS (5432) and S3 gateway endpoint (443); no ingress.
+# No Secrets Manager interface endpoint — app users authenticate via RDS IAM auth (ADR-0006).
 resource "aws_security_group" "lambda" {
   name        = "${local.name_prefix}-lambda"
   description = "LoonVault in-VPC Lambda functions"
@@ -112,14 +104,17 @@ resource "aws_security_group_rule" "lambda_to_rds" {
   description              = "Lambda to RDS Postgres"
 }
 
-resource "aws_security_group_rule" "lambda_to_endpoints" {
-  type                     = "egress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.lambda.id
-  source_security_group_id = aws_security_group.vpc_endpoints.id
-  description              = "Lambda to VPC interface endpoints (Secrets Manager)"
+# Transform Lambda reaches S3 (raw read, snapshot write) via the S3 gateway endpoint.
+# Gateway-endpoint traffic is matched by the S3 managed prefix list, not an SG, so the
+# egress rule must target the prefix list ID.
+resource "aws_security_group_rule" "lambda_to_s3" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.lambda.id
+  prefix_list_ids   = [aws_vpc_endpoint.s3.prefix_list_id]
+  description       = "Lambda to S3 via gateway endpoint"
 }
 
 resource "aws_security_group_rule" "rds_from_lambda" {
@@ -130,16 +125,6 @@ resource "aws_security_group_rule" "rds_from_lambda" {
   security_group_id        = aws_security_group.rds.id
   source_security_group_id = aws_security_group.lambda.id
   description              = "RDS ingress from Lambda SG only. SG-to-SG, no CIDR blocks (OPA enforced)"
-}
-
-resource "aws_security_group_rule" "endpoints_from_lambda" {
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.vpc_endpoints.id
-  source_security_group_id = aws_security_group.lambda.id
-  description              = "Interface endpoints ingress from Lambda SG"
 }
 
 # ── VPC endpoints ─────────────────────────────────────────────────────────────
@@ -153,19 +138,9 @@ resource "aws_vpc_endpoint" "s3" {
   tags = { Name = "${local.name_prefix}-s3-gateway" }
 }
 
-# Secrets Manager interface endpoint — in-VPC Lambdas cannot reach Secrets Manager
-# without NAT or this endpoint; ephemeral cost (~$0.01/AZ/hr, destroyed with stack)
-resource "aws_vpc_endpoint" "secretsmanager" {
-  #checkov:skip=CKV_AWS_123:Policy attached at IAM role level; endpoint policy would be redundant
-  vpc_id              = aws_vpc.main.id
-  service_name        = "com.amazonaws.${local.region}.secretsmanager"
-  vpc_endpoint_type   = "Interface"
-  private_dns_enabled = true
-  subnet_ids          = [aws_subnet.lambda_a.id, aws_subnet.lambda_b.id]
-  security_group_ids  = [aws_security_group.vpc_endpoints.id]
-
-  tags = { Name = "${local.name_prefix}-secretsmanager" }
-}
+# No Secrets Manager interface endpoint — app users authenticate via RDS IAM auth, so the
+# in-VPC Lambdas make no Secrets Manager (or any other) AWS API call requiring an endpoint.
+# IAM auth tokens are signed locally (SigV4) from the execution-role credentials. (ADR-0006)
 
 # ── VPC Flow Logs ─────────────────────────────────────────────────────────────
 resource "aws_cloudwatch_log_group" "flow_logs" {

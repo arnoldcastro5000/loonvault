@@ -165,7 +165,7 @@ resource "aws_lambda_function" "transform" {
     variables = {
       DB_HOST          = aws_db_instance.main.address
       DB_NAME          = var.db_name
-      DB_SECRET_ARN    = aws_secretsmanager_secret.db_credentials.arn
+      DB_USER          = "lv_writer"
       SNAPSHOTS_BUCKET = aws_s3_bucket.snapshots.id
     }
   }
@@ -214,9 +214,9 @@ resource "aws_lambda_function" "read" {
 
   environment {
     variables = {
-      DB_HOST       = aws_db_instance.main.address
-      DB_NAME       = var.db_name
-      DB_SECRET_ARN = aws_secretsmanager_secret.db_credentials.arn
+      DB_HOST = aws_db_instance.main.address
+      DB_NAME = var.db_name
+      DB_USER = "lv_reader"
     }
   }
 

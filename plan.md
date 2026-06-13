@@ -29,7 +29,7 @@ attack-&-defense demonstrations.
 | Data | BoC Valet — rates, FX, CPI/core inflation, BCPI (single source) |
 | Keys / account / frontend | **Single shared customer-managed KMS CMK** for S3 raw zone, RDS, and Secrets Manager (see ADR-0005 — separate per-service CMKs are the production standard but consolidated here for budget); S3 snapshots bucket uses SSE-S3 (AES-256) not CMK — public reads via Cloudflare cannot decrypt SSE-KMS objects; single account (multi-account documented as tradeoff); **Next.js/TypeScript static site on S3** (REST endpoint, `ca-central-1`), Cloudflare CDN/WAF/DDoS in front |
 | Domains | API: `api-loonvault.cloudsecuritypractice.com` → Cloudflare → API Gateway. Frontend: `loonvault.cloudsecuritypractice.com` → Cloudflare → S3 REST endpoint. Cloudflare Access team domain: `loonvault.cloudflareaccess.com` |
-| Secrets | **Secrets Manager** (CMK-encrypted) for DB credential; SSM Parameter Store for all other config |
+| Secrets / DB auth | **RDS IAM authentication** for app DB users (no stored credential — ADR-0006); Secrets Manager (CMK) holds only the RDS-managed master password; SSM Parameter Store (SecureString) for the origin secret + other config |
 | Task runner | **Justfile** — `just loonvault-apply`, `just loonvault-destroy`, `just deploy-frontend`, `just scan` wrap all terminal-only operations; raw commands documented in README as fallback |
 | STS | Regional endpoint `sts.ca-central-1.amazonaws.com` — avoids us-east-1 SPOF |
 | Budget | **< $10/mo** |
@@ -80,15 +80,17 @@ public keys at `https://loonvault.cloudflareaccess.com/cdn-cgi/access/certs`).
   Access on all private buckets (raw zone, Terraform state); snapshots bucket and frontend
   bucket are intentional public-read exceptions; versioning (+ Object Lock for integrity);
   explicit data-classification exercise.
-- **Secrets:** Secrets Manager (CMK) for DB credential; resource policy restricts
-  `GetSecretValue` to Read Lambda and Transform Lambda execution role ARNs only; automatic
-  rotation enabled; SDK-level caching (TTL ~1hr) so warm Lambdas survive short outages. DB
-  password generated directly in Secrets Manager (not via Terraform `random_password`) —
-  Terraform references the secret ARN only, never the value, so plaintext never appears in
-  Terraform state.
+- **Secrets / DB auth:** application DB users authenticate via **RDS IAM authentication**
+  (ADR-0006) — no stored DB credential. Each Lambda's execution role holds `rds-db:connect`
+  on its own `dbuser` ARN; tokens are signed locally (SigV4, 15-min TTL), so the in-VPC
+  Lambdas make no Secrets Manager call and need no interface endpoint. The only Secrets
+  Manager secret is the RDS **master** password, auto-managed by RDS (`manage_master_user_password`,
+  CMK-encrypted) and never read by the Lambdas — Terraform references no secret value, so
+  plaintext never appears in state.
 - **Database:** least-privilege Postgres roles — Read Lambda connects as login user
-  `lv_reader`, which inherits the `NOLOGIN` role `role_reader` (`SELECT` only on specific
-  tables); Transform Lambda connects as `lv_writer`, inheriting `role_writer`
+  `lv_reader` (granted `rds_iam` for auth), which inherits the `NOLOGIN` role `role_reader`
+  (`SELECT` only on specific tables); Transform Lambda connects as `lv_writer` (also
+  `rds_iam`), inheriting `role_writer`
   (`INSERT`/`UPDATE` only) in Phase 1, upgraded to `role_transformer`
   (`SELECT`/`INSERT`/`UPDATE` on `series_observations` only) in Phase 2 — read access is
   required to compute Pressure Metrics from stored Series. `role_writer` is retained for
@@ -122,15 +124,14 @@ public keys at `https://loonvault.cloudflareaccess.com/cdn-cgi/access/certs`).
 ### Transform Lambda (inside VPC)
 - `s3:GetObject` on `arn:aws:s3:::loonvault-raw/*`
 - `s3:PutObject` on `arn:aws:s3:::loonvault-snapshots/*`
-- `kms:Decrypt` on shared CMK ARN (covers S3 raw zone read + Secrets Manager decrypt)
+- `rds-db:connect` on the `lv_writer` dbuser ARN (RDS IAM auth — no Secrets Manager)
+- `kms:Decrypt` on shared CMK ARN (covers S3 raw zone read + SQS message decrypt)
 - `kms:GenerateDataKey` on shared CMK ARN (covers RDS; snapshots bucket uses SSE-S3, no KMS needed)
-- `secretsmanager:GetSecretValue` on DB credential secret ARN
 - VPC attachment (`AWSLambdaVPCAccessExecutionRole`)
 - CloudWatch Logs on its log group
 
 ### Read Lambda (inside VPC)
-- `secretsmanager:GetSecretValue` on DB credential secret ARN
-- `kms:Decrypt` on shared CMK ARN
+- `rds-db:connect` on the `lv_reader` dbuser ARN (RDS IAM auth — no Secrets Manager, no KMS)
 - VPC attachment (`AWSLambdaVPCAccessExecutionRole`)
 - CloudWatch Logs on its log group
 - **Blast radius if compromised:** DB reads only (data is public anyway). Cannot write to S3,
@@ -156,8 +157,9 @@ time — EventBridge has no memory across events).
 AccessDenied spike = fingerprint of permission enumeration (Pacu, ScoutSuite). One
 AccessDenied is noise; a burst is an attacker probing what a compromised credential can reach.
 
-Additional: CloudWatch alarm on anomalous `GetSecretValue` volume or unexpected principal on
-the DB credential secret.
+Additional: CloudWatch/CloudTrail alarm on IAM policy changes that widen `rds-db:connect`
+scope, and on `GetSecretValue` against the RDS-managed master secret (which the Lambdas
+never call — any access is anomalous by definition).
 
 ---
 
@@ -216,7 +218,7 @@ Each phase leaves a deployable, secure thing — stop at any phase and still hav
 
 - **Phase 1 — Vertical slice:** one series → S3 raw → RDS → one public `GET`, fully secured.
   Includes: shared-secret header on API GW, `sslmode=verify-full` + RDS CA bundle, least-
-  privilege Postgres roles, Secrets Manager (CMK) for DB credential.
+  privilege Postgres roles, RDS IAM authentication for app DB users (no stored credential).
   → *Verify: live endpoint returns real data, encrypted, least-privilege.*
 
 - **Phase 2 — Breadth:** more series + derived "pressure" metrics + Cloudflare Access admin
@@ -272,8 +274,10 @@ answer its questions out loud, unaided.
 - [ ] Trace one request end-to-end: Cloudflare → API Gateway → Lambda → RDS. Where TLS
       terminates at each hop. Why `sslmode=verify-full` matters even inside a private subnet
       (`require` encrypts but doesn't verify — MITM inside the VPC is the threat).
-- [ ] Why Secrets Manager instead of SSM for the DB credential (automatic rotation); why not
-      RDS IAM auth (complexity not justified at this scale); the cost tradeoff vs SSM.
+- [ ] Why RDS IAM authentication for app DB users (no stored credential, removes the Secrets
+      Manager interface endpoint, short-lived tokens — ADR-0006); the tradeoffs (connection-rate
+      ceiling, resource-ID-tied ARN on an ephemeral instance); why the RDS master secret still
+      uses Secrets Manager.
 - [ ] How the shared-secret header prevents direct API Gateway access; what happens to your
       threat model if it's absent or the token is leaked.
 
@@ -355,18 +359,24 @@ answer its questions out loud, unaided.
 
 ## Budget Guardrails ( < $10/mo )
 
-- **Secrets Manager** for DB credential only (~$0.40/mo + SDK caching to reduce API call cost);
-  SSM Parameter Store for all other config. Chosen over SSM for automatic RDS rotation;
-  chosen over RDS IAM auth because complexity isn't justified at this scale.
-- **Gateway** VPC endpoints only — *avoid* interface endpoints (~$7/mo each).
-- RDS `db.t4g.micro` free tier; `destroy`/`apply` when idle to stay $0 after 12 months.
+- **App DB auth via RDS IAM** (ADR-0006) — no stored credential, no Secrets Manager call on
+  the data path. Secrets Manager holds only the RDS-managed master password (~$0.40/mo).
+- **Gateway VPC endpoints only** (S3 gateway endpoint — free). **No interface endpoints and
+  no NAT**: the in-VPC Lambdas sign IAM auth tokens locally, so they make no AWS API call
+  needing an endpoint. (Removing the Secrets Manager interface endpoint that an earlier
+  Secrets-Manager design required saves ~$14.60/mo while the stack runs — see ADR-0006.)
+- RDS `db.t4g.micro` (~$0.016/hr running); `destroy`/`apply` around interviews keeps it near
+  $0 when idle. Note: the AWS Free Tier changed on 2025-07-15 — accounts created after that
+  date get a 6-month / $200-credit plan, **not** the legacy 12-month free tier, so the
+  ephemeral apply/destroy pattern (not a perpetual free instance) is what keeps RDS cost down.
 - Managed security services (GuardDuty/Security Hub/Config) enabled in **short evidence
   bursts only** — capture screenshots, then disable.
-- KMS CMKs ~$1–3/mo total (S3 CMK + RDS CMK + Secrets Manager CMK).
+- **Single shared KMS CMK** (~$1/mo) for S3 raw zone, RDS, and Secrets Manager (ADR-0005);
+  the Phase 0 Terraform state CMK is separate (~$1/mo) → ~$2/mo total.
 - CloudWatch Logs retention: **2 years** (Protected B requirement; ~$1–2/mo at LoonVault volume).
 - **Last-resort cost control:** if monthly spend exceeds budget, `just loonvault-destroy` the entire
   backend stack. Re-apply (`just loonvault-apply`) only before interviews. Frontend S3 bucket and
-  Next.js static files remain always-on at negligible cost. KMS CMKs persist (keys are not destroyed — ~$1/mo each at rest).
+  Next.js static files remain always-on at negligible cost. The shared CMK persists (keys are not destroyed — ~$1/mo at rest).
   IaC makes full restore a single command.
 
 ---
@@ -390,8 +400,9 @@ answer its questions out loud, unaided.
      (synchronous standby, automatic failover ~60–120s). Note: a read replica helps read
      scaling but requires manual promotion — it is not equivalent to Multi-AZ.
    - *`ca-central-1` region:* full region failure takes down everything. Out of budget scope.
-   - *Secrets Manager:* Lambda cold starts fail during an outage. Warm Lambdas survive up to
-     SDK cache TTL (~1hr). Accepted residual risk.
+   - *DB auth (RDS IAM):* app DB auth no longer depends on Secrets Manager (ADR-0006) — IAM
+     tokens are signed locally, so there is no Secrets Manager cold-start dependency on the
+     data path. The IAM control plane (token validation) routes through us-east-1; see below.
 5. **us-east-1 dependency:** IAM control plane routes through us-east-1. Mitigated by regional
    STS endpoint. Documented as an infrastructure dependency outside our control.
 6. **GitHub Actions supply chain risk:** CI carries no AWS credentials at all, so a
@@ -413,7 +424,8 @@ audit trail (CloudTrail + alarms). Documented in cloud exit strategy.
 
 | Service | Criticality | Exit path |
 |---|---|---|
-| AWS Secrets Manager | HIGH — API down if unavailable at Lambda cold start | `aws secretsmanager get-secret-value --secret-id <name>` → destination system |
+| AWS Secrets Manager | LOW — holds only the RDS-managed master password; app DB auth uses RDS IAM (ADR-0006), so the data path has no Secrets Manager dependency | `aws secretsmanager get-secret-value --secret-id <name>` → destination system |
+| RDS IAM authentication | MEDIUM — app DB connections fail if the IAM/STS control plane is unavailable; token validation routes through us-east-1 (mitigated by regional STS endpoint) | Re-enable password auth + Secrets Manager as documented fallback |
 | AWS SQS | MEDIUM — Transform Lambda not triggered if unavailable; messages retained in queue and processed on recovery | Export messages via `aws sqs receive-message`; replay against replacement system |
 | AWS S3 (static frontend bucket) | LOW — Cloudflare serves cached responses during an S3 outage; frontend degrades gracefully | `aws s3 sync s3://loonvault-frontend/ ./out/` → serve static files from any CDN or static host |
 

@@ -179,7 +179,6 @@ resource "aws_db_instance" "main" {
   #checkov:skip=CKV_AWS_157:Multi-AZ not required for ephemeral portfolio POC; single-AZ is intentional
   #checkov:skip=CKV_AWS_118:Enhanced monitoring adds cost; not required for ephemeral portfolio POC
   #checkov:skip=CKV_AWS_293:Deletion protection intentionally disabled — stack is ephemeral (terraform destroy after interviews)
-  #checkov:skip=CKV_AWS_161:IAM auth not used; credentials managed via Secrets Manager (simpler for POC)
   #checkov:skip=CKV_AWS_353:Performance Insights adds cost; not required for ephemeral portfolio POC
   identifier     = local.name_prefix
   engine         = "postgres"
@@ -191,6 +190,10 @@ resource "aws_db_instance" "main" {
   # RDS manages the master password — Terraform never sees the plaintext value
   manage_master_user_password   = true
   master_user_secret_kms_key_id = aws_kms_key.main.arn
+
+  # Application users (lv_reader/lv_writer) authenticate with short-lived IAM tokens —
+  # no stored DB credential, no Secrets Manager call on the data path (ADR-0006)
+  iam_database_authentication_enabled = true
 
   # Storage
   allocated_storage = 20
@@ -222,20 +225,10 @@ resource "aws_db_instance" "main" {
   tags = { Name = "${local.name_prefix}-rds" }
 }
 
-# ── Secrets Manager — application DB credentials ──────────────────────────────
-# Stores reader and writer credentials as a JSON object.
-# DB password is managed by RDS — this secret holds the app-level role credentials
-# provisioned during db-init. Terraform references only ARNs; plaintext never in state.
-resource "aws_secretsmanager_secret" "db_credentials" {
-  #checkov:skip=CKV2_AWS_57:Auto-rotation requires a Lambda rotator function, out of scope for Phase 1
-  name       = "${local.name_prefix}/db-credentials"
-  kms_key_id = aws_kms_key.main.arn
-
-  recovery_window_in_days = 0
-}
-
-# Secret value is set out-of-band (scripts/db-init.sql provisions the roles;
-# operator sets the secret after running db-init). Terraform manages the shell only.
+# Application DB users authenticate via RDS IAM auth (ADR-0006) — there is no stored
+# application DB credential. The only Secrets Manager secret in the stack is the RDS
+# master password, auto-created and managed by RDS (manage_master_user_password above)
+# and never read by the Lambdas.
 
 # ── SSM SecureString — X-Origin-Secret (G-01) ─────────────────────────────────
 # Lambda authorizer reads this to validate the Cloudflare origin token.

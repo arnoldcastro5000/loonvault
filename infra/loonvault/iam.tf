@@ -162,19 +162,11 @@ resource "aws_iam_role_policy" "transform" {
         Resource = "${aws_s3_bucket.snapshots.arn}/snapshots/*"
       },
       {
-        Sid      = "ReadDbCredentials"
+        # IAM database authentication — connect as lv_writer; token signed locally (ADR-0006)
+        Sid      = "ConnectAsWriter"
         Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = aws_secretsmanager_secret.db_credentials.arn
-      },
-      {
-        Sid      = "DecryptDbCredentials"
-        Effect   = "Allow"
-        Action   = ["kms:Decrypt"]
-        Resource = aws_kms_key.main.arn
-        Condition = {
-          StringEquals = { "kms:ViaService" = "secretsmanager.${local.region}.amazonaws.com" }
-        }
+        Action   = ["rds-db:connect"]
+        Resource = "arn:aws:rds-db:${local.region}:${local.account_id}:dbuser:${aws_db_instance.main.resource_id}/lv_writer"
       },
       {
         Sid    = "ConsumeSQS"
@@ -234,19 +226,11 @@ resource "aws_iam_role_policy" "read" {
         Resource = "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/lambda/${local.name_prefix}-read:*"
       },
       {
-        Sid      = "ReadDbCredentials"
+        # IAM database authentication — connect as lv_reader; token signed locally (ADR-0006)
+        Sid      = "ConnectAsReader"
         Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = aws_secretsmanager_secret.db_credentials.arn
-      },
-      {
-        Sid      = "DecryptDbCredentials"
-        Effect   = "Allow"
-        Action   = ["kms:Decrypt"]
-        Resource = aws_kms_key.main.arn
-        Condition = {
-          StringEquals = { "kms:ViaService" = "secretsmanager.${local.region}.amazonaws.com" }
-        }
+        Action   = ["rds-db:connect"]
+        Resource = "arn:aws:rds-db:${local.region}:${local.account_id}:dbuser:${aws_db_instance.main.resource_id}/lv_reader"
       },
     ]
   })

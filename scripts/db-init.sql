@@ -5,12 +5,10 @@
 --   psql "host=<rds_endpoint> dbname=loonvault user=loonvault_admin sslmode=verify-full" \
 --        -f scripts/db-init.sql
 --
--- After running:
---   1. Set reader_password and writer_password in Secrets Manager:
---      aws secretsmanager put-secret-value \
---        --secret-id loonvault/db-credentials \
---        --secret-string '{"reader_username":"lv_reader","reader_password":"<gen>",
---                          "writer_username":"lv_writer","writer_password":"<gen>"}'
+-- Authentication: the application users (lv_reader / lv_writer) use RDS IAM
+-- authentication (ADR-0006) — they have no password. The Lambdas generate a short-lived
+-- IAM token at connect time. There is no Secrets Manager secret to populate; this script
+-- is the only credential-provisioning step.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- Extensions (pgaudit loaded via parameter group; uuid for future use)
@@ -28,20 +26,25 @@ BEGIN
 END
 $$;
 
--- ── Login users ───────────────────────────────────────────────────────────────
--- Passwords are placeholders; operator must set real values then update the
--- Secrets Manager secret before any Lambda can connect.
+-- ── Login users (RDS IAM authentication — no passwords) ───────────────────────
+-- lv_reader / lv_writer authenticate with short-lived IAM tokens, not passwords.
+-- The rds_iam role grant delegates authentication to AWS IAM (ADR-0006).
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'lv_reader') THEN
-        CREATE USER lv_reader WITH PASSWORD 'REPLACE_ME' LOGIN;
+        CREATE USER lv_reader WITH LOGIN;
     END IF;
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'lv_writer') THEN
-        CREATE USER lv_writer WITH PASSWORD 'REPLACE_ME' LOGIN;
+        CREATE USER lv_writer WITH LOGIN;
     END IF;
 END
 $$;
 
+-- Delegate authentication to IAM (RDS-managed role; requires IAM auth enabled on the instance)
+GRANT rds_iam TO lv_reader;
+GRANT rds_iam TO lv_writer;
+
+-- Table privileges still come from the NOLOGIN roles
 GRANT role_reader TO lv_reader;
 GRANT role_writer TO lv_writer;
 

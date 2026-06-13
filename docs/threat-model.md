@@ -56,8 +56,7 @@ The **AI** actor is a force-multiplier on OE and TE: published code that would r
                                       │
                               [Transform Lambda] ──▶ [RDS Postgres]
                                     in-VPC             role_transformer
-                                      │
-                              [Secrets Manager] ◀── both in-VPC Lambdas
+                                                       RDS IAM auth (no secret)
                               [SSM Param Store] ◀── Lambda Authorizer
 
 [GitHub Actions] ── no AWS creds ──▶ static scans only (PUBLIC REPO)
@@ -66,9 +65,9 @@ The **AI** actor is a force-multiplier on OE and TE: published code that would r
 [Frontend] ── S3 static site (REST endpoint) · ca-central-1 · Cloudflare proxy
 ```
 
-**Trust boundaries:** Cloudflare edge / API Gateway; VPC perimeter (Ingest Lambda is outside); Lambda execution role boundary; Postgres role boundary; Secrets Manager resource policy boundary; S3 bucket policy boundary.
+**Trust boundaries:** Cloudflare edge / API Gateway; VPC perimeter (Ingest Lambda is outside); Lambda execution role boundary; Postgres role boundary; IAM `rds-db:connect` boundary (per-user DB auth); S3 bucket policy boundary.
 
-**What is public:** Lambda code, Terraform modules, OPA policies, GitHub Actions workflows, this threat model, detection rule patterns, DREAD scores, and all control descriptions. **What is not public:** secret values (X-Origin-Secret, DB credential), specific API Gateway URL (changes each `terraform apply`), KMS CMK ARNs (in state, not repo), AWS account ID.
+**What is public:** Lambda code, Terraform modules, OPA policies, GitHub Actions workflows, this threat model, detection rule patterns, DREAD scores, and all control descriptions. **What is not public:** secret values (X-Origin-Secret; RDS master password — app users use IAM auth, no DB credential exists), specific API Gateway URL (changes each `terraform apply`), KMS CMK ARNs (in state, not repo), AWS account ID.
 
 ---
 
@@ -152,10 +151,10 @@ The **AI** actor is a force-multiplier on OE and TE: published code that would r
 |---|---|---|---|---|---|---|---|---|---|---|
 | T-013 | I | Compromised role_transformer reads entire Protected B series_observations table | TE MI | 8 | 3 | 4 | 7 | 3 | **5.0** | Medium |
 | T-014 | T | Crafted SQS message references malicious S3 key, triggers corrupted DB write | TE | 7 | 3 | 4 | 7 | 4 | **5.0** | Medium |
-| T-015 | I | Transform Lambda accidentally logs DB credential value to CloudWatch Logs | MI | 8 | 3 | 3 | 5 | 4 | **4.6** | Medium |
+| T-015 | I | Transform Lambda accidentally logs the RDS IAM auth token to CloudWatch Logs | MI | 8 | 3 | 3 | 5 | 4 | **4.6** | Medium |
 | T-016 | D | DLQ overflow from sustained poison-pill messages silently halts pipeline | OE TE | 6 | 6 | 5 | 7 | 5 | **5.8** | Medium |
 
-**Mitigating controls:** SQS resource policy limits producers to S3 raw-zone bucket only; role_transformer scoped to `INSERT`/`UPDATE`/`SELECT` on `series_observations` only (no `DELETE`, `DROP`, `TRUNCATE`); VPC network isolation; Secrets Manager SDK caching (credential not fetched on every invocation); Semgrep SAST (detects accidental logging patterns).
+**Mitigating controls:** SQS resource policy limits producers to S3 raw-zone bucket only; role_transformer scoped to `INSERT`/`UPDATE`/`SELECT` on `series_observations` only (no `DELETE`, `DROP`, `TRUNCATE`); VPC network isolation; RDS IAM auth means no stored DB credential exists, and the auth token is short-lived (15-min) and never constructed by handler code from a logged value; Semgrep SAST (detects accidental logging patterns).
 
 **Gap — T-016:** No CloudWatch alarm on DLQ depth. A sustained bad-message injection fills the DLQ silently — the pipeline stalls but no alert fires. A `ApproximateNumberOfMessagesVisible` alarm on the DLQ is absent from the detection pipeline design.
 
@@ -166,11 +165,11 @@ The **AI** actor is a force-multiplier on OE and TE: published code that would r
 | ID | Cat | Threat | TA | D | R | E | A | Di | Score | Sev |
 |---|---|---|---|---|---|---|---|---|---|---|
 | T-017 | D | Sustained parallel requests exhaust Lambda concurrency; API unavailable | OE TE | 7 | 7 | 6 | 9 | 7 | **7.2** | High |
-| T-018 | E | Compromised Read Lambda role retrieves DB credential from Secrets Manager | TE MI | 7 | 3 | 4 | 7 | 3 | **4.8** | Medium |
+| T-018 | E | Compromised Read Lambda role mints an RDS IAM token and connects as lv_reader | TE MI | 7 | 3 | 4 | 7 | 3 | **4.8** | Medium |
 | T-019 | R | Public API has no per-caller identity; all reads are anonymous and non-attributable | OE TE | 4 | 9 | 9 | 5 | 7 | **6.8** | High |
 | T-020 | I | Protected B data returned to callers who bypass Cloudflare WAF via known API GW URL | TE | 6 | 6 | 5 | 8 | 5 | **6.0** | High |
 
-**Mitigating controls:** API Gateway throttling (burst + rate limits); Cloudflare rate limiting; Lambda authorizer (403 without origin secret); role_reader restricted to `SELECT` on `series_observations` only; Secrets Manager resource policy restricts `GetSecretValue` to Read Lambda and Transform Lambda ARNs only; VPC network isolation.
+**Mitigating controls:** API Gateway throttling (burst + rate limits); Cloudflare rate limiting; Lambda authorizer (403 without origin secret); role_reader restricted to `SELECT` on `series_observations` only; RDS IAM auth — the role's `rds-db:connect` grant is scoped to the single `lv_reader` dbuser ARN, and a stolen token expires in 15 minutes (no durable credential to exfiltrate); VPC network isolation.
 
 **Gap — T-017:** No reserved concurrency configured on the Read Lambda. An uncapped Lambda can consume the entire account-level concurrency budget (1,000 by default), starving all other Lambdas including the Transform Lambda. Reserved concurrency would cap the blast radius of a flood that bypasses API GW throttling.
 
@@ -224,16 +223,16 @@ The **AI** actor is a force-multiplier on OE and TE: published code that would r
 
 ---
 
-### 5.9 Secrets Manager and KMS
+### 5.9 IAM database auth, Secrets Manager, and KMS
 
 | ID | Cat | Threat | TA | D | R | E | A | Di | Score | Sev |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T-032 | I | DB credential accidentally placed in Terraform state via regression (e.g., `random_password` reintroduced) | MI | 7 | 2 | 3 | 5 | 3 | **4.0** | Medium |
-| T-033 | I | Unauthorized `GetSecretValue` on DB credential secret by compromised principal | TE MI | 8 | 2 | 3 | 6 | 3 | **4.4** | Medium |
-| T-034 | D | KMS CMK disabled or scheduled for deletion; all encrypted data (S3, RDS, Secrets Manager) inaccessible | MI | 9 | 2 | 4 | 9 | 3 | **5.4** | Medium |
-| T-035 | D | Secrets Manager regional outage prevents Lambda cold starts; API unavailable | — | 7 | 3 | 1 | 9 | 4 | **4.8** | Medium |
+| T-032 | I | DB password reintroduced into Terraform state via regression (e.g., `random_password` + Secrets Manager re-added) | MI | 7 | 2 | 3 | 5 | 3 | **4.0** | Medium |
+| T-033 | E | Compromised principal widens an execution role to `rds-db:connect` on a higher-privilege dbuser | TE MI | 8 | 2 | 3 | 6 | 3 | **4.4** | Medium |
+| T-034 | D | KMS CMK disabled or scheduled for deletion; all encrypted data (S3, RDS, master secret) inaccessible | MI | 9 | 2 | 4 | 9 | 3 | **5.4** | Medium |
+| T-035 | D | IAM/STS control-plane outage prevents RDS IAM token validation; DB connections fail | — | 7 | 3 | 1 | 9 | 4 | **4.8** | Medium |
 
-**Mitigating controls:** DB password generated directly in Secrets Manager (not `random_password`); Terraform references secret ARN only; Secrets Manager resource policy restricts `GetSecretValue` to Read Lambda and Transform Lambda execution role ARNs; root explicitly denied; CloudWatch alarm on anomalous `GetSecretValue` volume; CloudTrail KMS data events (Decrypt/GenerateDataKey); automatic key rotation annually; CMK deletion requires 7–30 day pending period; SDK-level credential caching (TTL ~1hr) allows warm Lambdas to survive short Secrets Manager outages.
+**Mitigating controls:** App DB users use RDS IAM auth — no stored DB credential, so there is no secret value to leak or place in state (closes the original T-032 vector by construction); the RDS master password is RDS-managed (`manage_master_user_password`), never referenced by value in Terraform. Each `rds-db:connect` grant is scoped to a single dbuser ARN; OPA/CloudTrail detection covers IAM policy widening (T-033). KMS: CloudTrail KMS data events (Decrypt/GenerateDataKey); automatic key rotation annually; CMK deletion requires 7–30 day pending period. RDS IAM token validation routes through the IAM/STS control plane (us-east-1) — mitigated by the regional STS endpoint; warm DB connections survive a short control-plane blip since tokens are only needed at connect time (T-035).
 
 **Gap — T-034:** No EventBridge rule fires specifically on `DisableKey`, `ScheduleKeyDeletion`, or `CancelKeyDeletion` KMS API calls. These should be added to the detection pipeline. Current detection covers IAM policy widening but not CMK lifecycle events.
 
@@ -353,18 +352,18 @@ These threats arise specifically from the public posture: full code publication 
 | **5.0** | Med | T-014 | T | Crafted SQS message → malicious DB write |
 | **5.0** | Med | T-026 | T | role_transformer overwrites series_observations |
 | **5.0** | Med | T-039 | R | AccessDenied alarm misconfigured — spike undetected |
-| **4.8** | Med | T-018 | E | Read Lambda role → DB credential extracted |
+| **4.8** | Med | T-018 | E | Read Lambda role → IAM token, connects as lv_reader |
 | **4.8** | Med | T-024 | T | MITM on Lambda-to-RDS connection |
 | **4.8** | Med | T-030 | I | S3 raw zone exposed publicly (drift) |
 | **4.8** | Med | T-031 | T | S3 versioning disabled via drift |
-| **4.8** | Med | T-035 | D | Secrets Manager outage blocks cold starts |
+| **4.8** | Med | T-035 | D | IAM/STS outage blocks RDS token validation |
 | **4.6** | Med | T-003 | S | CF Access JWT stolen — admin plane accessed |
-| **4.6** | Med | T-015 | I | Transform Lambda logs DB credential |
+| **4.6** | Med | T-015 | I | Transform Lambda logs RDS IAM auth token |
 | **4.4** | Med | T-021 | S | CF Access JWT replayed |
-| **4.4** | Med | T-033 | I | Unauthorized GetSecretValue on DB credential |
+| **4.4** | Med | T-033 | E | Role widened to rds-db:connect on higher-priv dbuser |
 | **4.4** | Med | T-043 | T | GitHub Actions script injection |
 | **4.2** | Med | T-022 | D | Admin refresh floods Ingest Lambda |
-| **4.0** | Med | T-032 | I | DB credential in Terraform state (regression) |
+| **4.0** | Med | T-032 | I | DB password reintroduced in Terraform state (regression) |
 | **4.0** | Med | T-037 | T | CloudTrail logs deleted |
 | **3.8** | Low | T-005 | I | Edge cache serves admin response |
 | **3.8** | Low | T-012 | I | Ingest Lambda beacons via internet access |
@@ -413,7 +412,7 @@ The following risks are known, accepted for this POC, and documented with produc
 | **No Object Lock on S3 raw zone** | T-029 T-031 | Stretch goal; versioning alone preserves history | Enable Object Lock in COMPLIANCE mode with a retention period matching Protected B audit requirements |
 | **Developer workstation = single apply path** | T-041 | Deliberate design (no CI credentials); workstation compromise = full control | Bastion/jump host with session recording; dual-approval for destructive operations (`terraform destroy`) |
 | **SHA-pinned Actions residual supply chain risk** | T-040 | Zero-day compromise of a pinned SHA undetectable without independent verification | Sigstore/cosign for signed Actions verification; SLSA attestations for dependencies |
-| **Secrets Manager cold-start gap** | T-035 | Warm Lambdas survive on SDK cache; cold starts during an outage fail | Fallback to SSM Parameter Store for a read-only credential copy; or accept cold-start failure as bounded |
+| **RDS IAM auth control-plane dependency** | T-035 | DB token validation depends on the IAM/STS control plane (us-east-1); warm DB connections survive a brief blip since tokens are only needed at connect time | Regional STS endpoint (in place); accept bounded connect-time failure during a control-plane outage as residual |
 | **Single shared CMK for S3 raw zone, RDS, and Secrets Manager** | T-034 | Budget constraint (~$10/mo ceiling); $1/CMK/month makes per-service keys a $2/month premium — see ADR-0005. S3 snapshots bucket uses SSE-S3, not this CMK, because public reads cannot decrypt SSE-KMS objects. | Separate CMKs per service with independent key policies and rotation schedules |
 
 ---
