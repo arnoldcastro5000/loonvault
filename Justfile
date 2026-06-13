@@ -4,8 +4,17 @@ _default:
     @just --list
 
 # First-time setup: create S3 state bucket + DynamoDB lock (run once, outside devcontainer)
+# Temporarily moves backend.tf aside so terraform apply uses local state (S3 bucket doesn't exist yet).
+# bootstrap-migrate then moves that local state into S3 and restores the remote backend.
 bootstrap:
-    cd infra/bootstrap && terraform init -backend=false && terraform apply
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd infra/bootstrap
+    rm -rf .terraform
+    mv backend.tf backend.tf.disabled
+    trap 'mv -f backend.tf.disabled backend.tf 2>/dev/null || true' EXIT
+    terraform init
+    terraform apply
 
 # Migrate bootstrap local state into S3 (run once, after bootstrap)
 # Requires infra/bootstrap/backend.hcl — copy from backend.hcl.example and fill in account ID
