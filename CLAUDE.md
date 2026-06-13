@@ -7,7 +7,7 @@
 | What changed | File to update | Variable/label |
 |---|---|---|
 | Added/removed a CI job | `scripts/verify-docs.sh` | `check "CI job count" "$CI_JOBS" "6"` |
-| Added/removed a gitleaks rule | `scripts/verify-docs.sh` | `check "gitleaks custom rule count" ...` (expected: 7) |
+| Added/removed a gitleaks rule | `scripts/verify-docs.sh` | `check "gitleaks custom rule count" ...` (expected: 8) |
 | Added/removed a trufflehog detector | `scripts/verify-docs.sh` | `check "trufflehog custom detector count" ...` (expected: 7) |
 | Added/removed a resource in `infra/bootstrap/main.tf` | `scripts/verify-docs.sh` | `check "bootstrap Terraform resource count" ...` (expected: 9) |
 | Added/removed a resource in `infra/org/main.tf` | `scripts/verify-docs.sh` | `check "org Terraform resource count" ...` (expected: 2) |

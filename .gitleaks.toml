@@ -33,12 +33,18 @@ secretGroup = 1
 
 [[rules]]
 id = "aws-account-id-iam-principal"
-description = "AWS account ID as bare IAM Principal (no ARN)"
-regex = '''"AWS"\s*:\s*"(\d{12})"'''
+description = "AWS account ID as bare IAM Principal (scalar or array element)"
+regex = '''"AWS"\s*:\s*\[?\s*"(\d{12})"'''
 secretGroup = 1
 
 [[rules]]
 id = "aws-account-id-console-url"
 description = "AWS account ID in console deep-link URL"
 regex = '''[?&#]accountId=(\d{12})'''
+secretGroup = 1
+
+[[rules]]
+id = "aws-account-id-array-element"
+description = "AWS account ID as a bare quoted array element (following a comma)"
+regex = ''',\s*"(\d{12})"'''
 secretGroup = 1
