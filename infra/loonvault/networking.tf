@@ -68,6 +68,11 @@ resource "aws_route_table_association" "rds_b" {
   route_table_id = aws_route_table.private.id
 }
 
+# Lock down the default VPC security group — no ingress or egress (CKV2_AWS_12)
+resource "aws_default_security_group" "default" {
+  vpc_id = aws_vpc.main.id
+}
+
 # ── Security groups ───────────────────────────────────────────────────────────
 # VPC endpoints SG — accepts HTTPS from Lambda SG
 resource "aws_security_group" "vpc_endpoints" {

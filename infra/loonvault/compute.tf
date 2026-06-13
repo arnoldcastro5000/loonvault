@@ -55,6 +55,9 @@ resource "aws_cloudwatch_log_group" "read" {
 # ── Authorizer Lambda ─────────────────────────────────────────────────────────
 resource "aws_lambda_function" "authorizer" {
   #checkov:skip=CKV_AWS_272:Code signing out of scope for portfolio POC
+  #checkov:skip=CKV_AWS_117:Authorizer intentionally not in VPC — must reach SSM via internet; no VPC endpoint for SSM provisioned
+  #checkov:skip=CKV_AWS_116:Authorizer is synchronous (API GW); DLQ not applicable to sync invocations
+  #checkov:skip=CKV_AWS_173:Env vars contain only config paths, not secrets; secrets live in SSM SecureString
   function_name = "${local.name_prefix}-authorizer"
   role          = aws_iam_role.authorizer.arn
   runtime       = "python3.13"
@@ -84,6 +87,9 @@ resource "aws_lambda_function" "authorizer" {
 # ── Ingest Lambda ─────────────────────────────────────────────────────────────
 resource "aws_lambda_function" "ingest" {
   #checkov:skip=CKV_AWS_272:Code signing out of scope for portfolio POC
+  #checkov:skip=CKV_AWS_117:Ingest intentionally not in VPC — must reach BoC Valet API on internet
+  #checkov:skip=CKV_AWS_116:Ingest is scheduled (EventBridge); async failures surface via CloudWatch alarm on DLQ
+  #checkov:skip=CKV_AWS_173:Env vars contain only bucket name and series codes, not secrets
   function_name = "${local.name_prefix}-ingest"
   role          = aws_iam_role.ingest.arn
   runtime       = "python3.13"
@@ -132,6 +138,8 @@ resource "aws_lambda_permission" "ingest_eventbridge" {
 # ── Transform Lambda ──────────────────────────────────────────────────────────
 resource "aws_lambda_function" "transform" {
   #checkov:skip=CKV_AWS_272:Code signing out of scope for portfolio POC
+  #checkov:skip=CKV_AWS_116:Transform uses SQS with DLQ (aws_sqs_queue.transform_dlq) — Lambda DLQ is redundant
+  #checkov:skip=CKV_AWS_173:Env vars contain only DB host/name and secret ARN, not secret values
   function_name = "${local.name_prefix}-transform"
   role          = aws_iam_role.transform.arn
   runtime       = "python3.13"
@@ -181,6 +189,8 @@ resource "aws_lambda_event_source_mapping" "transform_sqs" {
 # ── Read Lambda ───────────────────────────────────────────────────────────────
 resource "aws_lambda_function" "read" {
   #checkov:skip=CKV_AWS_272:Code signing out of scope for portfolio POC
+  #checkov:skip=CKV_AWS_116:Read is synchronous (API GW); DLQ not applicable to sync invocations
+  #checkov:skip=CKV_AWS_173:Env vars contain only DB host/name and secret ARN, not secret values
   function_name = "${local.name_prefix}-read"
   role          = aws_iam_role.read.arn
   runtime       = "python3.13"

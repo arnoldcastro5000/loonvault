@@ -2,6 +2,8 @@
 resource "aws_s3_bucket" "raw" {
   #checkov:skip=CKV_AWS_144:Cross-region replication not required for ephemeral portfolio POC
   #checkov:skip=CKV2_AWS_62:S3 event notifications handled via SQS below, not EventBridge
+  #checkov:skip=CKV_AWS_18:S3 access logging adds storage cost; not required for ephemeral portfolio POC
+  #checkov:skip=CKV2_AWS_61:Lifecycle policy not required for ephemeral portfolio POC
   bucket = "${local.name_prefix}-raw-${local.account_id}"
 }
 
@@ -48,6 +50,10 @@ resource "aws_s3_bucket_notification" "raw" {
 resource "aws_s3_bucket" "snapshots" {
   #checkov:skip=CKV_AWS_144:Cross-region replication not required for ephemeral portfolio POC
   #checkov:skip=CKV2_AWS_62:No event notifications on snapshots bucket
+  #checkov:skip=CKV_AWS_18:S3 access logging adds storage cost; not required for ephemeral portfolio POC
+  #checkov:skip=CKV2_AWS_61:Lifecycle policy not required for ephemeral portfolio POC
+  #checkov:skip=CKV_AWS_145:Snapshots bucket uses SSE-S3 intentionally — public reads cannot decrypt SSE-KMS (ADR-0005)
+  #checkov:skip=CKV_AWS_21:Snapshots are regenerated on every ingest; versioning adds cost without benefit
   bucket = "${local.name_prefix}-snapshots-${local.account_id}"
 }
 
@@ -61,6 +67,9 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "snapshots" {
 }
 
 resource "aws_s3_bucket_public_access_block" "snapshots" {
+  #checkov:skip=CKV_AWS_54:block_public_policy intentionally false — snapshots are public by design (ADR-0004)
+  #checkov:skip=CKV_AWS_56:restrict_public_buckets intentionally false — snapshots are public by design (ADR-0004)
+  #checkov:skip=CKV2_AWS_6:Partial public access block is intentional — snapshots bucket serves public reads (ADR-0004)
   bucket                  = aws_s3_bucket.snapshots.id
   block_public_acls       = true
   block_public_policy     = false
@@ -69,6 +78,7 @@ resource "aws_s3_bucket_public_access_block" "snapshots" {
 }
 
 resource "aws_s3_bucket_policy" "snapshots_public_read" {
+  #checkov:skip=CKV_AWS_70:Principal * is intentional — snapshots bucket is public by design (ADR-0004)
   bucket = aws_s3_bucket.snapshots.id
 
   policy = jsonencode({
@@ -148,6 +158,12 @@ resource "aws_db_parameter_group" "postgres" {
   }
 
   parameter {
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
+  }
+
+  parameter {
     name  = "log_connections"
     value = "1"
   }
@@ -160,6 +176,10 @@ resource "aws_db_parameter_group" "postgres" {
 
 resource "aws_db_instance" "main" {
   #checkov:skip=CKV_AWS_157:Multi-AZ not required for ephemeral portfolio POC; single-AZ is intentional
+  #checkov:skip=CKV_AWS_118:Enhanced monitoring adds cost; not required for ephemeral portfolio POC
+  #checkov:skip=CKV_AWS_293:Deletion protection intentionally disabled — stack is ephemeral (terraform destroy after interviews)
+  #checkov:skip=CKV_AWS_161:IAM auth not used; credentials managed via Secrets Manager (simpler for POC)
+  #checkov:skip=CKV_AWS_353:Performance Insights adds cost; not required for ephemeral portfolio POC
   identifier     = local.name_prefix
   engine         = "postgres"
   engine_version = "17"
@@ -186,10 +206,12 @@ resource "aws_db_instance" "main" {
   parameter_group_name = aws_db_parameter_group.postgres.name
 
   # Backups
-  backup_retention_period = 7
-  backup_window           = "04:00-05:00"
-  maintenance_window      = "Mon:05:00-Mon:06:00"
-  deletion_protection     = false
+  backup_retention_period    = 7
+  backup_window              = "04:00-05:00"
+  maintenance_window         = "Mon:05:00-Mon:06:00"
+  deletion_protection        = false
+  auto_minor_version_upgrade = true
+  copy_tags_to_snapshot      = true
 
   # Monitoring
   enabled_cloudwatch_logs_exports = ["postgresql"]
