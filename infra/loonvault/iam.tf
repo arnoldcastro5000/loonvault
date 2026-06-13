@@ -35,15 +35,15 @@ resource "aws_iam_role_policy" "authorizer" {
         Resource = "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/lambda/${local.name_prefix}-authorizer:*"
       },
       {
-        Sid    = "ReadOriginSecret"
-        Effect = "Allow"
-        Action = ["ssm:GetParameter"]
+        Sid      = "ReadOriginSecret"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
         Resource = "arn:aws:ssm:${local.region}:${local.account_id}:parameter${var.origin_secret_ssm_path}"
       },
       {
-        Sid    = "DecryptOriginSecret"
-        Effect = "Allow"
-        Action = ["kms:Decrypt"]
+        Sid      = "DecryptOriginSecret"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
         Resource = aws_kms_key.main.arn
         Condition = {
           StringEquals = { "kms:ViaService" = "ssm.${local.region}.amazonaws.com" }
@@ -51,6 +51,11 @@ resource "aws_iam_role_policy" "authorizer" {
       },
     ]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "authorizer_xray" {
+  role       = aws_iam_role.authorizer.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
 # ── Ingest Lambda ─────────────────────────────────────────────────────────────
@@ -78,15 +83,15 @@ resource "aws_iam_role_policy" "ingest" {
         Resource = "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/lambda/${local.name_prefix}-ingest:*"
       },
       {
-        Sid    = "WriteRawZone"
-        Effect = "Allow"
-        Action = ["s3:PutObject"]
+        Sid      = "WriteRawZone"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
         Resource = "${aws_s3_bucket.raw.arn}/raw/*"
       },
       {
-        Sid    = "EncryptRawObjects"
-        Effect = "Allow"
-        Action = ["kms:GenerateDataKey", "kms:Decrypt"]
+        Sid      = "EncryptRawObjects"
+        Effect   = "Allow"
+        Action   = ["kms:GenerateDataKey", "kms:Decrypt"]
         Resource = aws_kms_key.main.arn
         Condition = {
           StringEquals = { "kms:ViaService" = "s3.${local.region}.amazonaws.com" }
@@ -96,11 +101,21 @@ resource "aws_iam_role_policy" "ingest" {
   })
 }
 
+resource "aws_iam_role_policy_attachment" "ingest_xray" {
+  role       = aws_iam_role.ingest.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 # ── Transform Lambda ──────────────────────────────────────────────────────────
 # In VPC — reads S3 raw zone, writes RDS, writes S3 snapshots (SSE-S3, no CMK needed)
 resource "aws_iam_role" "transform" {
   name               = "${local.name_prefix}-transform"
   assume_role_policy = local.lambda_assume_role_policy
+}
+
+resource "aws_iam_role_policy_attachment" "transform_xray" {
+  role       = aws_iam_role.transform.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
 resource "aws_iam_role_policy_attachment" "transform_vpc" {
@@ -126,36 +141,36 @@ resource "aws_iam_role_policy" "transform" {
         Resource = "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/lambda/${local.name_prefix}-transform:*"
       },
       {
-        Sid    = "ReadRawZone"
-        Effect = "Allow"
-        Action = ["s3:GetObject"]
+        Sid      = "ReadRawZone"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
         Resource = "${aws_s3_bucket.raw.arn}/raw/*"
       },
       {
-        Sid    = "DecryptRawObjects"
-        Effect = "Allow"
-        Action = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Sid      = "DecryptRawObjects"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
         Resource = aws_kms_key.main.arn
         Condition = {
           StringEquals = { "kms:ViaService" = "s3.${local.region}.amazonaws.com" }
         }
       },
       {
-        Sid    = "WriteSnapshots"
-        Effect = "Allow"
-        Action = ["s3:PutObject"]
+        Sid      = "WriteSnapshots"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
         Resource = "${aws_s3_bucket.snapshots.arn}/snapshots/*"
       },
       {
-        Sid    = "ReadDbCredentials"
-        Effect = "Allow"
-        Action = ["secretsmanager:GetSecretValue"]
+        Sid      = "ReadDbCredentials"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
         Resource = aws_secretsmanager_secret.db_credentials.arn
       },
       {
-        Sid    = "DecryptDbCredentials"
-        Effect = "Allow"
-        Action = ["kms:Decrypt"]
+        Sid      = "DecryptDbCredentials"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
         Resource = aws_kms_key.main.arn
         Condition = {
           StringEquals = { "kms:ViaService" = "secretsmanager.${local.region}.amazonaws.com" }
@@ -172,9 +187,9 @@ resource "aws_iam_role_policy" "transform" {
         Resource = aws_sqs_queue.transform.arn
       },
       {
-        Sid    = "DecryptSQS"
-        Effect = "Allow"
-        Action = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Sid      = "DecryptSQS"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
         Resource = aws_kms_key.main.arn
         Condition = {
           StringEquals = { "kms:ViaService" = "sqs.${local.region}.amazonaws.com" }
@@ -189,6 +204,11 @@ resource "aws_iam_role_policy" "transform" {
 resource "aws_iam_role" "read" {
   name               = "${local.name_prefix}-read"
   assume_role_policy = local.lambda_assume_role_policy
+}
+
+resource "aws_iam_role_policy_attachment" "read_xray" {
+  role       = aws_iam_role.read.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
 resource "aws_iam_role_policy_attachment" "read_vpc" {
@@ -214,15 +234,15 @@ resource "aws_iam_role_policy" "read" {
         Resource = "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/lambda/${local.name_prefix}-read:*"
       },
       {
-        Sid    = "ReadDbCredentials"
-        Effect = "Allow"
-        Action = ["secretsmanager:GetSecretValue"]
+        Sid      = "ReadDbCredentials"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
         Resource = aws_secretsmanager_secret.db_credentials.arn
       },
       {
-        Sid    = "DecryptDbCredentials"
-        Effect = "Allow"
-        Action = ["kms:Decrypt"]
+        Sid      = "DecryptDbCredentials"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
         Resource = aws_kms_key.main.arn
         Condition = {
           StringEquals = { "kms:ViaService" = "secretsmanager.${local.region}.amazonaws.com" }

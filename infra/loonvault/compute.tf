@@ -65,6 +65,10 @@ resource "aws_lambda_function" "authorizer" {
   # Reserved concurrency — no flood of auth checks (G-02)
   reserved_concurrent_executions = 10
 
+  tracing_config {
+    mode = "Active"
+  }
+
   filename         = data.archive_file.authorizer.output_path
   source_code_hash = data.archive_file.authorizer.output_base64sha256
 
@@ -88,6 +92,10 @@ resource "aws_lambda_function" "ingest" {
   memory_size   = 256
 
   reserved_concurrent_executions = 5
+
+  tracing_config {
+    mode = "Active"
+  }
 
   filename         = data.archive_file.ingest.output_path
   source_code_hash = data.archive_file.ingest.output_base64sha256
@@ -133,6 +141,10 @@ resource "aws_lambda_function" "transform" {
 
   reserved_concurrent_executions = 5
 
+  tracing_config {
+    mode = "Active"
+  }
+
   filename         = data.archive_file.transform.output_path
   source_code_hash = data.archive_file.transform.output_base64sha256
 
@@ -143,10 +155,10 @@ resource "aws_lambda_function" "transform" {
 
   environment {
     variables = {
-      DB_HOST                = aws_db_instance.main.address
-      DB_NAME                = var.db_name
-      DB_CREDENTIALS_ARN     = aws_secretsmanager_secret.db_credentials.arn
-      SNAPSHOTS_BUCKET       = aws_s3_bucket.snapshots.id
+      DB_HOST            = aws_db_instance.main.address
+      DB_NAME            = var.db_name
+      DB_CREDENTIALS_ARN = aws_secretsmanager_secret.db_credentials.arn
+      SNAPSHOTS_BUCKET   = aws_s3_bucket.snapshots.id
     }
   }
 
@@ -177,6 +189,10 @@ resource "aws_lambda_function" "read" {
   memory_size   = 256
 
   reserved_concurrent_executions = 20
+
+  tracing_config {
+    mode = "Active"
+  }
 
   filename         = data.archive_file.read.output_path
   source_code_hash = data.archive_file.read.output_base64sha256

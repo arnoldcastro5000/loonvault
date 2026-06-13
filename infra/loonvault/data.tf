@@ -113,11 +113,11 @@ resource "aws_sqs_queue_policy" "transform" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Sid    = "AllowS3Publish"
-      Effect = "Allow"
+      Sid       = "AllowS3Publish"
+      Effect    = "Allow"
       Principal = { Service = "s3.amazonaws.com" }
-      Action   = "sqs:SendMessage"
-      Resource = aws_sqs_queue.transform.arn
+      Action    = "sqs:SendMessage"
+      Resource  = aws_sqs_queue.transform.arn
       Condition = {
         ArnLike = { "aws:SourceArn" = aws_s3_bucket.raw.arn }
       }
@@ -160,22 +160,22 @@ resource "aws_db_parameter_group" "postgres" {
 
 resource "aws_db_instance" "main" {
   #checkov:skip=CKV_AWS_157:Multi-AZ not required for ephemeral portfolio POC; single-AZ is intentional
-  identifier        = local.name_prefix
-  engine            = "postgres"
-  engine_version    = "17"
-  instance_class    = "db.t4g.micro"
-  db_name           = var.db_name
-  username          = var.db_master_username
+  identifier     = local.name_prefix
+  engine         = "postgres"
+  engine_version = "17"
+  instance_class = "db.t4g.micro"
+  db_name        = var.db_name
+  username       = var.db_master_username
 
   # RDS manages the master password — Terraform never sees the plaintext value
   manage_master_user_password   = true
   master_user_secret_kms_key_id = aws_kms_key.main.arn
 
   # Storage
-  allocated_storage     = 20
-  storage_type          = "gp3"
-  storage_encrypted     = true
-  kms_key_id            = aws_kms_key.main.arn
+  allocated_storage = 20
+  storage_type      = "gp3"
+  storage_encrypted = true
+  kms_key_id        = aws_kms_key.main.arn
 
   # Networking
   db_subnet_group_name   = aws_db_subnet_group.main.name
