@@ -78,7 +78,7 @@ jobs:
             "https://github.com/betterleaks/betterleaks/releases/download/v1.5.0/betterleaks_1.5.0_linux_x64.tar.gz"
           tar xzf betterleaks.tar.gz -C /usr/local/bin betterleaks
           rm betterleaks.tar.gz
-          betterleaks .
+          betterleaks git .
 
       - name: trufflehog (verified credentials)
         uses: trufflesecurity/trufflehog@d411fff7b8879a62509f3fa98c07f247ac089a51 # v3.95.5
