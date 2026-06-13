@@ -39,7 +39,7 @@ echo
 # ── Secret scanning config ────────────────────────────────────────────────────
 echo "--- Secret scanning ---"
 GITLEAKS_RULES=$(grep -c '^\[\[rules\]\]' .gitleaks.toml || true)
-check "gitleaks custom rule count" "$GITLEAKS_RULES" "7"
+check "gitleaks custom rule count" "$GITLEAKS_RULES" "8"
 
 TRUFFLEHOG_DETECTORS=$(grep -c '^  - name:' .trufflehog.yml || true)
 check "trufflehog custom detector count" "$TRUFFLEHOG_DETECTORS" "7"
