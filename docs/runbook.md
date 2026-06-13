@@ -85,3 +85,45 @@ automatically (expected plan change, not drift — see ADR-0006).
 Running 24/7 ≈ $34/mo (busts the <$10 budget). Realistic ephemeral use (a few hours around
 interviews) ≈ $4/mo. The baseline that survives `destroy` (~$2.60/mo) is the two KMS CMKs +
 the RDS-managed master secret. Always `destroy` when you're done.
+
+## Break-glass: `main` branch protection
+
+`main` is protected by the **`protect-main`** repository ruleset (enforcement `active`,
+no bypass actors — it binds admins too). Every update to `main` must go through a PR with all
+six CI checks green (`Terraform`, `SAST and secrets`, `Lint and workflow security`,
+`Supply chain`, `Dependency review`, `Docs drift`). Direct pushes to `main` are rejected.
+
+This is deliberate (it enforces Phase 0 story 33 — no change bypasses the static-scan gate),
+but it creates one lockout scenario: **if CI itself wedges** — a pinned Action SHA gets
+yanked, a scanner has an outage, or a check is renamed and no longer reports — then *no* PR
+can satisfy the required checks, including the PR that fixes CI. Breaking glass temporarily
+lifts enforcement so the fix can land, then restores it.
+
+> Requires an **admin** token (the repo owner account). The `arnolds-assistant` collaborator
+> has `WRITE` only and cannot change rulesets. Authenticate as the owner first:
+> `gh auth switch -u <owner>` (or `gh auth login`).
+
+```bash
+REPO=arnoldcastro5000/loonvault
+
+# 1. Find the ruleset id (don't hardcode it — it can change if recreated)
+RULESET=$(gh api "/repos/$REPO/rulesets" --jq '.[] | select(.name=="protect-main") | .id')
+
+# 2. Break glass — disable enforcement (dry-run mode; blocks nothing)
+gh api --method PATCH "/repos/$REPO/rulesets/$RULESET" -f enforcement=disabled
+
+# 3. Land the fix (PR-merge if possible; direct push to main only while disabled)
+
+# 4. RESTORE immediately after — this is the whole point of "break-glass"
+gh api --method PATCH "/repos/$REPO/rulesets/$RULESET" -f enforcement=active
+
+# 5. Confirm it's back on
+gh api "/repos/$REPO/rulesets/$RULESET" --jq '.enforcement'   # -> "active"
+```
+
+UI equivalent: **Settings → Rules → Rulesets → `protect-main` → Enforcement status** toggle
+between `Active` and `Disabled`.
+
+Every PATCH is recorded in the repo audit log, so the disable/restore window is auditable —
+treat that as a feature, not a workaround. Keep the disabled window as short as possible and
+re-enable in the same sitting; never leave `main` unprotected overnight.
