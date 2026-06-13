@@ -38,6 +38,7 @@ loonvault-plan:
     cd infra/loonvault && terraform validate && terraform plan -var-file=terraform.tfvars
 
 # Apply loonvault stack — outside devcontainer (ephemeral: apply before interviews, destroy after)
+# Post-apply steps (origin secret + db-init) are required — see docs/runbook.md
 loonvault-apply:
     terraform fmt -recursive -check infra/
     cd infra/loonvault && terraform validate && terraform apply -var-file=terraform.tfvars

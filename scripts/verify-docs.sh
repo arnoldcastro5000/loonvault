@@ -87,6 +87,7 @@ for f in \
   "CONTEXT.md" \
   "plan.md" \
   "docs/devcontainer.md" \
+  "docs/runbook.md" \
   "docs/adr/0001-single-data-source-boc-valet.md" \
   "docs/adr/0002-two-tier-data-model.md"
 do

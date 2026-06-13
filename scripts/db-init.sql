@@ -1,9 +1,11 @@
 -- LoonVault database initialisation
 -- Run once after terraform apply, against the RDS master user.
+-- This is step 2 of the post-apply runbook — see docs/runbook.md.
 --
 -- Usage (from developer terminal, inside VPC or via RDS Proxy):
 --   psql "host=<rds_endpoint> dbname=loonvault user=loonvault_admin sslmode=verify-full" \
 --        -f scripts/db-init.sql
+--   (or: just loonvault-db-init "$(terraform -chdir=infra/loonvault output -raw rds_endpoint)")
 --
 -- Authentication: the application users (lv_reader / lv_writer) use RDS IAM
 -- authentication (ADR-0006) — they have no password. The Lambdas generate a short-lived
