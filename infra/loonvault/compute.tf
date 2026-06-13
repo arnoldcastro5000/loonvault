@@ -1,4 +1,7 @@
 # ── Lambda packages ───────────────────────────────────────────────────────────
+# authorizer has no third-party deps (boto3 ships in the runtime), so it zips the
+# single handler directly. ingest/transform/read bundle dependencies, so they zip a
+# pre-built package/ directory produced by `just loonvault-build` (see docs/runbook.md).
 data "archive_file" "authorizer" {
   type        = "zip"
   source_file = "${path.module}/../../lambdas/authorizer/handler.py"
@@ -7,20 +10,37 @@ data "archive_file" "authorizer" {
 
 data "archive_file" "ingest" {
   type        = "zip"
-  source_file = "${path.module}/../../lambdas/ingest/handler.py"
+  source_dir  = "${path.module}/../../lambdas/ingest/package"
   output_path = "${path.module}/../../lambdas/ingest/handler.zip"
 }
 
 data "archive_file" "transform" {
   type        = "zip"
-  source_file = "${path.module}/../../lambdas/transform/handler.py"
+  source_dir  = "${path.module}/../../lambdas/transform/package"
   output_path = "${path.module}/../../lambdas/transform/handler.zip"
 }
 
 data "archive_file" "read" {
   type        = "zip"
-  source_file = "${path.module}/../../lambdas/read/handler.py"
+  source_dir  = "${path.module}/../../lambdas/read/package"
   output_path = "${path.module}/../../lambdas/read/handler.zip"
+}
+
+# RDS CA bundle delivered as a layer so in-VPC handlers can verify TLS at
+# /opt/rds-ca-bundle.pem (sslmode=verify-full). The .pem is downloaded by
+# `just loonvault-build`. Attached to the read + transform functions below.
+data "archive_file" "rds_ca_layer" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../lambdas/layers/rds-ca"
+  output_path = "${path.module}/../../lambdas/layers/rds-ca.zip"
+}
+
+resource "aws_lambda_layer_version" "rds_ca" {
+  layer_name          = "${local.name_prefix}-rds-ca"
+  filename            = data.archive_file.rds_ca_layer.output_path
+  source_code_hash    = data.archive_file.rds_ca_layer.output_base64sha256
+  compatible_runtimes = ["python3.13"]
+  description         = "RDS ca-central-1 CA bundle mounted at /opt/rds-ca-bundle.pem"
 }
 
 # ── CloudWatch log groups (pre-created so retention is managed by Terraform) ──
@@ -155,6 +175,7 @@ resource "aws_lambda_function" "transform" {
 
   filename         = data.archive_file.transform.output_path
   source_code_hash = data.archive_file.transform.output_base64sha256
+  layers           = [aws_lambda_layer_version.rds_ca.arn]
 
   vpc_config {
     subnet_ids         = [aws_subnet.lambda_a.id, aws_subnet.lambda_b.id]
@@ -206,6 +227,7 @@ resource "aws_lambda_function" "read" {
 
   filename         = data.archive_file.read.output_path
   source_code_hash = data.archive_file.read.output_base64sha256
+  layers           = [aws_lambda_layer_version.rds_ca.arn]
 
   vpc_config {
     subnet_ids         = [aws_subnet.lambda_a.id, aws_subnet.lambda_b.id]

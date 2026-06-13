@@ -25,9 +25,17 @@ holds no AWS credentials) with an active IAM Identity Center session.
 
 ```bash
 just loonvault-init      # terraform init with backend.hcl (one-time per clone)
+just loonvault-build     # bundle Lambda deps + download RDS CA bundle into package/ dirs
 just loonvault-plan      # review the plan — confirm resources + region (ca-central-1)
 just loonvault-apply     # create the stack
 ```
+
+> `loonvault-build` must run before `plan`/`apply`. The `ingest`, `transform`, and `read`
+> Lambdas zip a pre-built `package/` directory (handler + dependencies installed with
+> Lambda-compatible `manylinux2014_x86_64` wheels), and the RDS CA bundle is packaged as a
+> layer mounted at `/opt/rds-ca-bundle.pem`. Re-run `build` whenever handler code or
+> `requirements.txt` changes. The `authorizer` Lambda has no third-party deps and is zipped
+> directly from its handler.
 
 ## Post-apply (the stack is NOT functional until both steps run)
 

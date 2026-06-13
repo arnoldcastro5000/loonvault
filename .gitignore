@@ -52,6 +52,8 @@ handoff.md
 
 # Lambda build artefacts
 lambdas/**/*.zip
+lambdas/**/package/
+lambdas/layers/rds-ca/rds-ca-bundle.pem
 
 # Misc
 .DS_Store

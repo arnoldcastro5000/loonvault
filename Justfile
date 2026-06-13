@@ -32,6 +32,24 @@ org-apply:
 loonvault-init:
     cd infra/loonvault && terraform init -backend-config=backend.hcl
 
+# Build Lambda deployment packages + RDS CA layer (run before loonvault-plan/apply)
+# Bundles deps into per-Lambda package/ dirs using Lambda-compatible (manylinux x86_64) wheels.
+loonvault-build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for fn in ingest transform read; do
+      echo "Building $fn..."
+      rm -rf "lambdas/$fn/package"
+      mkdir -p "lambdas/$fn/package"
+      pip install -r "lambdas/$fn/requirements.txt" -t "lambdas/$fn/package" \
+        --platform manylinux2014_x86_64 --python-version 3.13 --only-binary=:all:
+      cp "lambdas/$fn/handler.py" "lambdas/$fn/package/"
+    done
+    echo "Downloading RDS ca-central-1 CA bundle..."
+    mkdir -p lambdas/layers/rds-ca
+    curl -fsSL https://truststore.pki.rds.amazonaws.com/ca-central-1/ca-central-1-bundle.pem \
+      -o lambdas/layers/rds-ca/rds-ca-bundle.pem
+
 # Plan loonvault stack — outside devcontainer
 loonvault-plan:
     terraform fmt -recursive -check infra/
