@@ -38,8 +38,8 @@ out/
 *.key
 *.p12
 
-# Claude Code local settings (developer-specific permission overrides)
-.claude/settings.local.json
+# Claude Code local settings and skills (developer-specific)
+.claude/
 
 # Logs
 *.log
