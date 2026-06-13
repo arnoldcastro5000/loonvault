@@ -74,7 +74,10 @@ jobs:
 
       - name: betterleaks
         run: |
-          pip install "https://github.com/betterleaks/betterleaks/archive/refs/tags/v1.5.0.tar.gz"
+          curl -sSLo betterleaks.tar.gz \
+            "https://github.com/betterleaks/betterleaks/releases/download/v1.5.0/betterleaks_1.5.0_linux_x64.tar.gz"
+          tar xzf betterleaks.tar.gz -C /usr/local/bin betterleaks
+          rm betterleaks.tar.gz
           betterleaks .
 
       - name: trufflehog (verified credentials)

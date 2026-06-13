@@ -104,7 +104,7 @@ resource "aws_security_group_rule" "lambda_to_rds" {
   protocol                 = "tcp"
   security_group_id        = aws_security_group.lambda.id
   source_security_group_id = aws_security_group.rds.id
-  description              = "Lambda → RDS Postgres"
+  description              = "Lambda -> RDS Postgres"
 }
 
 resource "aws_security_group_rule" "lambda_to_endpoints" {
@@ -114,7 +114,7 @@ resource "aws_security_group_rule" "lambda_to_endpoints" {
   protocol                 = "tcp"
   security_group_id        = aws_security_group.lambda.id
   source_security_group_id = aws_security_group.vpc_endpoints.id
-  description              = "Lambda → VPC interface endpoints (Secrets Manager)"
+  description              = "Lambda -> VPC interface endpoints (Secrets Manager)"
 }
 
 resource "aws_security_group_rule" "rds_from_lambda" {
