@@ -20,3 +20,7 @@ _Avoid_: derived series, computed indicator, derived metric
 **Indicator**:
 The umbrella term for anything the public API exposes — encompasses both Series and Pressure Metrics. Used in all external-facing descriptions ("cost-of-living indicators").
 _Avoid_: metric (too narrow), series (too narrow when referring to the full API surface)
+
+**Observation**:
+A single value for a Series or Pressure Metric at a specific date. The atomic unit of data stored in RDS and returned by the API.
+_Avoid_: data point, reading, record

@@ -27,7 +27,7 @@ attack-&-defense demonstrations.
 | Detection | Free-native + OSS (CloudTrail, Flow Logs, EventBridge→CloudWatch→SNS, Prowler) + short paid bursts |
 | CI/CD | GitHub Actions + public repo; **CI = static scans only** (`terraform fmt`, `terraform validate`, Checkov, betterleaks, TruffleHog (verified credentials + AWS account IDs), Semgrep (SAST), pip-audit (Python SCA), `npm audit` (frontend SCA), `just --fmt --check` (Justfile syntax), Socket.dev (supply chain), zizmor (Actions workflow security), Dependency Review (PR-time), Ruff (Python linter), ESLint/`next lint` (TypeScript linter), tflint + AWS ruleset (Terraform linter), regal (Rego linter), actionlint (Actions correctness) — no AWS credentials, every push/PR). **Dependabot**: daily PRs for `pip`, `npm`, `github-actions` dependencies. **Local hooks**: gitleaks pre-commit; OPA/Conftest pre-push. **`just apply` = terminal-only** (wraps `terraform apply`); `just deploy-frontend` for frontend. No GitHub OIDC role — GitHub Actions never holds AWS credentials; all Terraform changes originate from the developer's terminal. |
 | Data | BoC Valet — rates, FX, CPI/core inflation, BCPI (single source) |
-| Keys / account / frontend | Customer-managed **KMS CMKs** (S3 + RDS + Secrets Manager); single account (multi-account documented as tradeoff); **Next.js/TypeScript static site on S3** (REST endpoint, `ca-central-1`), Cloudflare CDN/WAF/DDoS in front |
+| Keys / account / frontend | **Single shared customer-managed KMS CMK** for S3 raw zone, RDS, and Secrets Manager (see ADR-0005 — separate per-service CMKs are the production standard but consolidated here for budget); S3 snapshots bucket uses SSE-S3 (AES-256) not CMK — public reads via Cloudflare cannot decrypt SSE-KMS objects; single account (multi-account documented as tradeoff); **Next.js/TypeScript static site on S3** (REST endpoint, `ca-central-1`), Cloudflare CDN/WAF/DDoS in front |
 | Domains | API: `api-loonvault.cloudsecuritypractice.com` → Cloudflare → API Gateway. Frontend: `loonvault.cloudsecuritypractice.com` → Cloudflare → S3 REST endpoint. Cloudflare Access team domain: `loonvault.cloudflareaccess.com` |
 | Secrets | **Secrets Manager** (CMK-encrypted) for DB credential; SSM Parameter Store for all other config |
 | Task runner | **Justfile** — `just apply`, `just destroy`, `just deploy-frontend`, `just scan` wrap all terminal-only operations; raw commands documented in README as fallback |
@@ -42,7 +42,9 @@ attack-&-defense demonstrations.
   BoC Valet) → BoC Valet → **encrypted, versioned S3 raw-zone** (CMK; Object Lock = stretch)
   → S3 Event Notification → **SQS queue** (DLQ for failed transforms; S3 resource policy
   permits S3 to send messages) → Transform Lambda (**inside VPC**, reads S3 via gateway
-  endpoint) → **RDS Postgres in a private subnet** (CMK).
+  endpoint) → **RDS Postgres in a private subnet** (CMK) + **S3 snapshots bucket** (SSE-S3;
+  public-readable via Cloudflare; frontend falls back to snapshots when API is unavailable —
+  see ADR-0004).
 - **Public read:** Cloudflare (DNS, WAF, rate-limit, TLS Full-strict, **1-hour edge cache** on `/series/*` + `/pressure-metrics/*`, query string in cache key, bypass for `/admin/*`) → API Gateway (throttling;
   Lambda authorizer validates **shared-secret header** `X-Origin-Secret`) → Read Lambda
   (**in-VPC**, least-privilege IAM) → RDS (`sslmode=verify-full`, TLS 1.2). **Gateway VPC
@@ -71,10 +73,13 @@ public keys at `https://loonvault.cloudflareaccess.com/cdn-cgi/access/certs`).
 - **Network:** VPC, private subnets for RDS + Transform/Read Lambdas; security groups
   (RDS SG ingress is SG-to-SG only — no CIDR blocks, enforced by OPA policy); gateway VPC
   endpoints (no NAT); VPC Flow Logs. Ingest Lambda outside VPC (trust boundary is IAM only).
-- **Data:** encryption at rest (CMK on S3 + RDS + Secrets Manager); TLS 1.2 enforced at every
-  hop (Cloudflare Full-strict; API GW `TLS_1_2` security policy; `sslmode=verify-full` + AWS
-  RDS CA bundle; RDS parameter group `ssl_min_protocol_version=TLSv1.2`); S3 Block Public
-  Access; versioning (+ Object Lock for integrity); explicit data-classification exercise.
+- **Data:** encryption at rest (shared CMK on S3 raw zone + RDS + Secrets Manager; S3 snapshots
+  bucket uses SSE-S3 — public reads via Cloudflare cannot decrypt SSE-KMS); TLS 1.2 enforced
+  at every hop (Cloudflare Full-strict; API GW `TLS_1_2` security policy; `sslmode=verify-full`
+  + AWS RDS CA bundle; RDS parameter group `ssl_min_protocol_version=TLSv1.2`); S3 Block Public
+  Access on all private buckets (raw zone, Terraform state); snapshots bucket and frontend
+  bucket are intentional public-read exceptions; versioning (+ Object Lock for integrity);
+  explicit data-classification exercise.
 - **Secrets:** Secrets Manager (CMK) for DB credential; resource policy restricts
   `GetSecretValue` to Read Lambda and Transform Lambda execution role ARNs only; automatic
   rotation enabled; SDK-level caching (TTL ~1hr) so warm Lambdas survive short outages. DB
@@ -110,20 +115,21 @@ public keys at `https://loonvault.cloudflareaccess.com/cdn-cgi/access/certs`).
 
 ### Ingest Lambda (outside VPC)
 - `s3:PutObject` on `arn:aws:s3:::loonvault-raw/*`
-- `kms:GenerateDataKey` on S3 CMK ARN
+- `kms:GenerateDataKey` on shared CMK ARN
 - CloudWatch Logs on its log group
 
 ### Transform Lambda (inside VPC)
 - `s3:GetObject` on `arn:aws:s3:::loonvault-raw/*`
-- `kms:Decrypt` on S3 CMK ARN
+- `s3:PutObject` on `arn:aws:s3:::loonvault-snapshots/*`
+- `kms:Decrypt` on shared CMK ARN (covers S3 raw zone read + Secrets Manager decrypt)
+- `kms:GenerateDataKey` on shared CMK ARN (covers RDS; snapshots bucket uses SSE-S3, no KMS needed)
 - `secretsmanager:GetSecretValue` on DB credential secret ARN
-- `kms:Decrypt` on Secrets Manager CMK ARN
 - VPC attachment (`AWSLambdaVPCAccessExecutionRole`)
 - CloudWatch Logs on its log group
 
 ### Read Lambda (inside VPC)
 - `secretsmanager:GetSecretValue` on DB credential secret ARN
-- `kms:Decrypt` on Secrets Manager CMK ARN
+- `kms:Decrypt` on shared CMK ARN
 - VPC attachment (`AWSLambdaVPCAccessExecutionRole`)
 - CloudWatch Logs on its log group
 - **Blast radius if compromised:** DB reads only (data is public anyway). Cannot write to S3,

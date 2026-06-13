@@ -414,6 +414,7 @@ The following risks are known, accepted for this POC, and documented with produc
 | **Developer workstation = single apply path** | T-041 | Deliberate design (no CI credentials); workstation compromise = full control | Bastion/jump host with session recording; dual-approval for destructive operations (`terraform destroy`) |
 | **SHA-pinned Actions residual supply chain risk** | T-040 | Zero-day compromise of a pinned SHA undetectable without independent verification | Sigstore/cosign for signed Actions verification; SLSA attestations for dependencies |
 | **Secrets Manager cold-start gap** | T-035 | Warm Lambdas survive on SDK cache; cold starts during an outage fail | Fallback to SSM Parameter Store for a read-only credential copy; or accept cold-start failure as bounded |
+| **Single shared CMK for S3 raw zone, RDS, and Secrets Manager** | T-034 | Budget constraint (~$10/mo ceiling); $1/CMK/month makes per-service keys a $2/month premium — see ADR-0005. S3 snapshots bucket uses SSE-S3, not this CMK, because public reads cannot decrypt SSE-KMS objects. | Separate CMKs per service with independent key policies and rotation schedules |
 
 ---
 

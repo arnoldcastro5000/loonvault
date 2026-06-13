@@ -50,6 +50,9 @@ yarn-error.log*
 # Handoff documents — never public
 handoff.md
 
+# Lambda build artefacts
+lambdas/**/*.zip
+
 # Misc
 .DS_Store
 *.swp

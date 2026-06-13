@@ -30,6 +30,7 @@ jobs:
         run: |
           cd infra/bootstrap && terraform init -backend=false && terraform validate
           cd ../org && terraform init -backend=false && terraform validate
+          cd ../loonvault && terraform init -backend=false && terraform validate
 
       - name: tflint
         run: |
@@ -166,3 +167,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+
+  docs-drift:
+    name: Docs drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: verify-docs
+        run: bash scripts/verify-docs.sh
