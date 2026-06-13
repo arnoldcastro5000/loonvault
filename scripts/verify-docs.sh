@@ -86,11 +86,16 @@ for f in \
   "docs/threat-model.md" \
   "CONTEXT.md" \
   "plan.md" \
+  "docs/devcontainer.md" \
   "docs/adr/0001-single-data-source-boc-valet.md" \
   "docs/adr/0002-two-tier-data-model.md"
 do
   check "file exists: $f" "$f" "" "exists"
 done
+
+# docs/devcontainer.md is the spec that .devcontainer/validate.sh checks against
+check ".devcontainer/validate.sh references devcontainer.md" \
+  "$(grep -c 'docs/devcontainer.md' .devcontainer/validate.sh || true)" "0" "neq"
 
 # ── Domain model ──────────────────────────────────────────────────────────────
 echo

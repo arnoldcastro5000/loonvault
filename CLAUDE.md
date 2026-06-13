@@ -16,7 +16,8 @@
 
 - All `uses:` actions in `ci.yml` must be SHA-pinned — no bare `@v1.2.3`
 - Specific tool versions must appear in `ci.yml` (gitleaks, tflint, trufflehog, actionlint)
-- Required files must exist: `docs/threat-model.md`, `CONTEXT.md`, `plan.md`, `docs/adr/0001-*`, `docs/adr/0002-*`
+- Required files must exist: `docs/threat-model.md`, `CONTEXT.md`, `plan.md`, `docs/devcontainer.md`, `docs/adr/0001-*`, `docs/adr/0002-*`
+- `.devcontainer/validate.sh` must still reference `docs/devcontainer.md` (keeps the spec and its validator linked)
 - `CONTEXT.md` must mention all three Pressure Metrics by name
 - `infra/main/` must not exist (phase gate — update when that changes)
 
