@@ -6,7 +6,8 @@ updates:
       interval: "daily"
 
   - package-ecosystem: "pip"
-    directory: "/"
+    directories:
+      - "/lambdas/*"
     schedule:
       interval: "daily"
 
