@@ -54,6 +54,7 @@ resource "aws_s3_bucket" "snapshots" {
   #checkov:skip=CKV2_AWS_61:Lifecycle policy not required for ephemeral portfolio POC
   #checkov:skip=CKV_AWS_145:Snapshots bucket uses SSE-S3 intentionally — public reads cannot decrypt SSE-KMS (ADR-0005)
   #checkov:skip=CKV_AWS_21:Snapshots are regenerated on every ingest; versioning adds cost without benefit
+  #checkov:skip=CKV2_AWS_6:Partial public access block is intentional — snapshots bucket serves public reads (ADR-0004)
   bucket = "${local.name_prefix}-snapshots-${local.account_id}"
 }
 
