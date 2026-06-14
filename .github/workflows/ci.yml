@@ -43,7 +43,7 @@ jobs:
 
       - name: checkov
         run: |
-          pip install checkov
+          pip install checkov==3.3.1
           checkov -d infra/ --framework terraform --quiet
 
   sast:
@@ -57,7 +57,7 @@ jobs:
 
       - name: semgrep
         run: |
-          pip install semgrep
+          pip install semgrep==1.166.0
           semgrep --config p/python \
                   --config p/owasp-top-ten \
                   --config p/typescript \
@@ -93,7 +93,7 @@ jobs:
       - name: ruff
         if: hashFiles('**/*.py') != ''
         run: |
-          pip install ruff
+          pip install ruff==0.15.17
           ruff check .
 
   lint:
@@ -114,7 +114,7 @@ jobs:
 
       - name: zizmor
         run: |
-          pip install zizmor
+          pip install zizmor==1.25.2
           zizmor .github/workflows/
 
       - name: actionlint
@@ -144,7 +144,7 @@ jobs:
       - name: pip-audit
         if: hashFiles('**/requirements*.txt', '**/pyproject.toml') != ''
         run: |
-          pip install pip-audit
+          pip install pip-audit==2.10.1
           find . -name 'requirements*.txt' -not -path '*/.venv/*' \
             -exec pip-audit -r {} \;
 
