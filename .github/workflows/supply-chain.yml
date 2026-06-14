@@ -1,0 +1,37 @@
+name: Supply chain
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# No AWS credentials — static scans only.
+permissions:
+  contents: read
+
+jobs:
+  supply-chain:
+    name: Supply chain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: pip-audit
+        if: hashFiles('**/requirements*.txt', '**/pyproject.toml') != ''
+        run: |
+          pip install pip-audit==2.10.1
+          find . -name 'requirements*.txt' -not -path '*/.venv/*' \
+            -exec pip-audit -r {} \;
+
+      - name: npm audit
+        if: hashFiles('frontend/package.json') != ''
+        run: cd frontend && npm ci && npm audit --audit-level=high
+
+      - name: socket
+        if: hashFiles('frontend/package.json') != ''
+        uses: SocketDev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+        with:
+          api-key: ${{ secrets.SOCKET_SECURITY_API_KEY }}

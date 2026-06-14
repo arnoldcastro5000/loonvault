@@ -1,0 +1,47 @@
+name: Terraform
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# No AWS credentials — static scans only.
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "~1.9"
+
+      - name: fmt check
+        run: terraform fmt -recursive -check infra/
+
+      - name: validate
+        run: |
+          cd infra/bootstrap && terraform init -backend=false && terraform validate
+          cd ../org && terraform init -backend=false && terraform validate
+          cd ../loonvault && terraform init -backend=false && terraform validate
+
+      - name: tflint
+        run: |
+          curl -sSLo tflint.zip \
+            "https://github.com/terraform-linters/tflint/releases/download/v0.63.1/tflint_linux_amd64.zip"
+          unzip -q tflint.zip -d /usr/local/bin
+          rm tflint.zip
+          tflint --init
+          tflint --recursive
+
+      - name: checkov
+        run: |
+          pip install checkov==3.3.1
+          checkov -d infra/ --framework terraform --quiet

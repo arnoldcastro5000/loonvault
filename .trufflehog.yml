@@ -41,10 +41,16 @@ detectors:
     keywords:
       - '"AWS"'
     regex:
-      account_id: '"AWS"\s*:\s*"(\d{12})"'
+      account_id: '"AWS"\s*:\s*\[?\s*"(\d{12})"'
 
   - name: AWSAccountIDinConsoleURL
     keywords:
       - "accountId="
     regex:
       account_id: '[?&#]accountId=(\d{12})'
+
+  - name: AWSAccountIDinArrayElement
+    keywords:
+      - '"AWS"'
+    regex:
+      account_id: ',\s*"(\d{12})"'
