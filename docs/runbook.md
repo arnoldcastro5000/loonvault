@@ -36,6 +36,18 @@ just loonvault-apply     # create the stack
 > layer mounted at `/opt/rds-ca-bundle.pem`. Re-run `build` whenever handler code or
 > `requirements.txt` changes. The `authorizer` Lambda has no third-party deps and is zipped
 > directly from its handler.
+>
+> **Hash-pinned deps.** `loonvault-build` installs with `pip install --require-hashes` from a
+> committed `lambdas/<fn>/requirements.lock` — every direct *and* transitive dependency is
+> pinned by SHA256, so pip verifies each downloaded wheel's hash and a tampered or substituted
+> artifact fails the build. `requirements.txt` holds the human-edited direct deps;
+> `requirements.lock` is generated from it. When you change a `requirements.txt`, regenerate
+> the locks (needs PyPI access + `pip install pip-tools`, run with Python 3.13 to match the
+> Lambda runtime) and commit them:
+>
+> ```bash
+> just lock-deps     # writes lambdas/*/requirements.lock with --generate-hashes
+> ```
 
 ## Post-apply (the stack is NOT functional until both steps run)
 

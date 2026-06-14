@@ -41,6 +41,21 @@ org-apply:
 loonvault-init:
     cd infra/loonvault && terraform init -backend-config=backend.hcl
 
+# Regenerate hash-pinned lockfiles (requirements.lock) for the three Lambdas.
+# Run on the host (needs PyPI access + pip-tools); commit the generated .lock files.
+# Re-run whenever a requirements.txt changes. Use Python 3.13 to match the Lambda runtime.
+lock-deps:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v pip-compile >/dev/null 2>&1 || { echo "pip-compile not found — run 'pip install pip-tools'"; exit 1; }
+    for fn in ingest transform read; do
+      echo "Locking $fn..."
+      pip-compile --generate-hashes --allow-unsafe --quiet \
+        --output-file "lambdas/$fn/requirements.lock" \
+        "lambdas/$fn/requirements.txt"
+    done
+    echo "Generated lambdas/*/requirements.lock — review and commit them."
+
 # Build Lambda deployment packages + RDS CA layer (run before loonvault-plan/apply)
 # Bundles deps into per-Lambda package/ dirs using Lambda-compatible (manylinux x86_64) wheels.
 loonvault-build:
@@ -50,7 +65,9 @@ loonvault-build:
       echo "Building $fn..."
       rm -rf "lambdas/$fn/package"
       mkdir -p "lambdas/$fn/package"
-      pip install -r "lambdas/$fn/requirements.txt" -t "lambdas/$fn/package" \
+      lock="lambdas/$fn/requirements.lock"
+      [ -f "$lock" ] || { echo "Missing $lock — run 'just lock-deps' first (needs PyPI access)"; exit 1; }
+      pip install --require-hashes -r "$lock" -t "lambdas/$fn/package" \
         --platform manylinux2014_x86_64 --python-version 3.13 --only-binary=:all:
       cp "lambdas/$fn/handler.py" "lambdas/$fn/package/"
     done
