@@ -1,0 +1,49 @@
+name: Lint and workflow security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# No AWS credentials — static scans only.
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint and workflow security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: just --fmt --check
+        run: |
+          curl -sSLo just.tar.gz \
+            "https://github.com/casey/just/releases/download/1.52.0/just-1.52.0-x86_64-unknown-linux-musl.tar.gz"
+          tar xzf just.tar.gz -C /usr/local/bin just
+          rm just.tar.gz
+          just --fmt --check --unstable
+
+      - name: zizmor
+        run: |
+          pip install zizmor==1.25.2
+          zizmor .github/workflows/
+
+      - name: actionlint
+        run: |
+          curl -sSLo actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
+          tar xzf actionlint.tar.gz -C /usr/local/bin actionlint
+          rm actionlint.tar.gz
+          actionlint
+
+      - name: regal
+        if: hashFiles('**/*.rego') != ''
+        run: |
+          curl -sSLo /usr/local/bin/regal \
+            "https://github.com/StyraInc/regal/releases/download/v0.41.1/regal_Linux_x86_64"
+          chmod +x /usr/local/bin/regal
+          regal lint .

@@ -26,7 +26,7 @@ check() {
 
 _ci_has() {
   local label="$1" str="$2"
-  if grep -qF "$str" .github/workflows/ci.yml; then
+  if grep -qrF "$str" .github/workflows/; then
     check "$label" "found" "found"
   else
     check "$label" "NOT FOUND" "found"
@@ -42,26 +42,27 @@ GITLEAKS_RULES=$(grep -c '^\[\[rules\]\]' .gitleaks.toml || true)
 check "gitleaks custom rule count" "$GITLEAKS_RULES" "8"
 
 TRUFFLEHOG_DETECTORS=$(grep -c '^  - name:' .trufflehog.yml || true)
-check "trufflehog custom detector count" "$TRUFFLEHOG_DETECTORS" "7"
+check "trufflehog custom detector count" "$TRUFFLEHOG_DETECTORS" "8"
 
 # ── CI workflow ───────────────────────────────────────────────────────────────
 echo
 echo "--- CI workflow ---"
 
-CI_JOBS=$(awk '/^jobs:/{p=1} p && /^  [a-zA-Z]/{count++} END{print count}' \
-  .github/workflows/ci.yml)
-# NOTE: If you add or remove a CI job, update this expected value.
-check "CI job count" "$CI_JOBS" "6"
+# One job per component workflow file. Count top-level jobs across all of them.
+CI_JOBS=$(awk 'FNR==1{p=0} /^jobs:/{p=1} p && /^  [a-zA-Z]/{count++} END{print count}' \
+  .github/workflows/*.yml)
+# NOTE: If you add or remove a CI workflow/job, update this expected value.
+check "CI job count" "$CI_JOBS" "7"
 
-UNPINNED=$(grep -E '^\s+uses:\s+' .github/workflows/ci.yml \
+UNPINNED=$(grep -rE '^\s+uses:\s+' .github/workflows/ \
   | { grep -v '@[0-9a-f]\{40\}' || true; } \
   | wc -l | tr -d ' ')
 check "all Actions SHA-pinned (no bare @vX.Y.Z)" "$UNPINNED" "0"
 
-_ci_has "gitleaks version v8.30.1 in ci.yml"   "v8.30.1"
-_ci_has "tflint version v0.63.1 in ci.yml"     "v0.63.1"
-_ci_has "trufflehog version v3.95.5 in ci.yml" "v3.95.5"
-_ci_has "actionlint version v1.7.12 in ci.yml" "v1.7.12"
+_ci_has "gitleaks version v8.30.1 in CI workflows"   "v8.30.1"
+_ci_has "tflint version v0.63.1 in CI workflows"     "v0.63.1"
+_ci_has "trufflehog version v3.95.5 in CI workflows" "v3.95.5"
+_ci_has "actionlint version v1.7.12 in CI workflows" "v1.7.12"
 
 # ── Terraform ─────────────────────────────────────────────────────────────────
 echo
