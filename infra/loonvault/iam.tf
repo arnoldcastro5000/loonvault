@@ -159,7 +159,7 @@ resource "aws_iam_role_policy" "transform" {
         Sid      = "WriteSnapshots"
         Effect   = "Allow"
         Action   = ["s3:PutObject"]
-        Resource = "${aws_s3_bucket.snapshots.arn}/snapshots/*"
+        Resource = "arn:aws:s3:::${local.snapshots_bucket}/snapshots/*"
       },
       {
         # IAM database authentication — connect as lv_writer; token signed locally (ADR-0006)

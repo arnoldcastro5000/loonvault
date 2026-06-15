@@ -87,9 +87,22 @@ loonvault-apply:
     terraform fmt -recursive -check infra/
     cd infra/loonvault && terraform validate && terraform apply -var-file=terraform.tfvars
 
-# Destroy loonvault stack — keeps bootstrap resources (outside devcontainer)
+# Destroy loonvault stack — keeps bootstrap + frontend resources (outside devcontainer)
 loonvault-destroy:
     cd infra/loonvault && terraform destroy -var-file=terraform.tfvars
+
+# ── Frontend stack (ALWAYS-ON — snapshots bucket, survives loonvault-destroy) ──
+# Requires infra/frontend/backend.hcl — copy from backend.hcl.example and fill in account ID
+frontend-init:
+    cd infra/frontend && terraform init -backend-config=backend.hcl
+
+frontend-plan:
+    terraform fmt -recursive -check infra/
+    cd infra/frontend && terraform validate && terraform plan
+
+frontend-apply:
+    terraform fmt -recursive -check infra/
+    cd infra/frontend && terraform validate && terraform apply
 
 # Initialise loonvault Postgres schema (run once after loonvault-apply)
 # Requires RDS connectivity — run from a host with VPC access or via bastion
