@@ -187,7 +187,7 @@ resource "aws_lambda_function" "transform" {
       DB_HOST          = aws_db_instance.main.address
       DB_NAME          = var.db_name
       DB_USER          = "lv_writer"
-      SNAPSHOTS_BUCKET = aws_s3_bucket.snapshots.id
+      SNAPSHOTS_BUCKET = local.snapshots_bucket
     }
   }
 

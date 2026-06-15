@@ -20,6 +20,14 @@ holds no AWS credentials) with an active IAM Identity Center session.
    ```hcl
    alert_email = "you@example.com"
    ```
+4. **Frontend stack (always-on).** Apply once and leave up — it holds the public snapshots
+   bucket and survives every backend `destroy`:
+   ```bash
+   cp infra/frontend/backend.hcl.example infra/frontend/backend.hcl
+   # edit: set bucket = loonvault-tfstate-<YOUR_ACCOUNT_ID>
+   just frontend-init
+   just frontend-apply
+   ```
 
 ## Deploy
 
@@ -87,16 +95,21 @@ terraform -chdir=infra/loonvault output api_endpoint
 just loonvault-destroy
 ```
 
-The frontend S3 bucket and the KMS CMKs persist (keys are not destroyed). Everything else —
-RDS, VPC, Lambdas, SQS — is torn down. Re-running `apply` recreates it; note that the RDS
-instance gets a **new resource ID**, so the `rds-db:connect` IAM policy re-resolves
-automatically (expected plan change, not drift — see ADR-0006).
+`loonvault-destroy` tears down the **entire backend** — RDS (+ its managed master secret),
+VPC, Lambdas, API Gateway, SQS, the `raw` bucket, and the **`main` CMK** (which enters a
+pending-deletion window and is not billed). The always-on **`frontend` stack** (public
+snapshots bucket) and the **bootstrap** state backend are separate stacks and are untouched —
+the parked frontend keeps serving the last-written snapshots via Cloudflare. Re-running `apply`
+recreates the backend; note that the RDS instance gets a **new resource ID**, so the
+`rds-db:connect` IAM policy re-resolves automatically (expected plan change, not drift — see
+ADR-0006).
 
 ## Cost reminder
 
 Running 24/7 ≈ $34/mo (busts the <$10 budget). Realistic ephemeral use (a few hours around
-interviews) ≈ $4/mo. The baseline that survives `destroy` (~$2.60/mo) is the two KMS CMKs +
-the RDS-managed master secret. Always `destroy` when you're done.
+interviews) ≈ $4/mo. The **parked baseline** that survives `loonvault-destroy` is only the
+bootstrap **tfstate CMK (~$1/mo)** — the `main` CMK and the RDS master secret go away with the
+backend, and the frontend snapshots bucket is ~$0. Always `destroy` when you're done.
 
 ## Break-glass: `main` branch protection
 
