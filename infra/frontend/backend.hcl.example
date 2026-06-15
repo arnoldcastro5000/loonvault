@@ -1,0 +1,6 @@
+bucket         = "loonvault-tfstate-<YOUR_ACCOUNT_ID>"
+key            = "frontend/terraform.tfstate"
+region         = "ca-central-1"
+encrypt        = true
+kms_key_id     = "alias/loonvault-tfstate"
+dynamodb_table = "loonvault-tfstate-lock"
