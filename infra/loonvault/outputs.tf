@@ -23,3 +23,13 @@ output "vpc_id" {
   description = "VPC ID"
   value       = aws_vpc.main.id
 }
+
+output "admin_instance_id" {
+  description = "db-init bastion instance ID — target for the EICE SSH tunnel (see `just db-tunnel`)"
+  value       = aws_instance.admin.id
+}
+
+output "master_secret_arn" {
+  description = "ARN of the RDS-managed master user secret — fetched by db-init over the EICE tunnel"
+  value       = aws_db_instance.main.master_user_secret[0].secret_arn
+}

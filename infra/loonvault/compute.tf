@@ -85,8 +85,9 @@ resource "aws_lambda_function" "authorizer" {
   timeout       = 10
   memory_size   = 128
 
-  # Reserved concurrency — no flood of auth checks (G-02)
-  reserved_concurrent_executions = 10
+  # Reserved concurrency — no flood of auth checks (G-02). Opt-in: needs the account
+  # Lambda concurrency quota raised above the default 10 (see var.reserved_concurrency_enabled).
+  reserved_concurrent_executions = var.reserved_concurrency_enabled ? 10 : null
 
   tracing_config {
     mode = "Active"
@@ -117,7 +118,7 @@ resource "aws_lambda_function" "ingest" {
   timeout       = 60
   memory_size   = 256
 
-  reserved_concurrent_executions = 5
+  reserved_concurrent_executions = var.reserved_concurrency_enabled ? 5 : null
 
   tracing_config {
     mode = "Active"
@@ -167,7 +168,7 @@ resource "aws_lambda_function" "transform" {
   timeout       = 300
   memory_size   = 512
 
-  reserved_concurrent_executions = 5
+  reserved_concurrent_executions = var.reserved_concurrency_enabled ? 5 : null
 
   tracing_config {
     mode = "Active"
@@ -219,7 +220,7 @@ resource "aws_lambda_function" "read" {
   timeout       = 30
   memory_size   = 256
 
-  reserved_concurrent_executions = 20
+  reserved_concurrent_executions = var.reserved_concurrency_enabled ? 20 : null
 
   tracing_config {
     mode = "Active"

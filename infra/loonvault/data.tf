@@ -102,7 +102,7 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_db_parameter_group" "postgres" {
   name        = "${local.name_prefix}-pg17"
   family      = "postgres17"
-  description = "LoonVault — pgaudit enabled (G-07)"
+  description = "LoonVault - pgaudit enabled (G-07)"
 
   parameter {
     name         = "shared_preload_libraries"
