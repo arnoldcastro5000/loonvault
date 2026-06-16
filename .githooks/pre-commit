@@ -1,0 +1,6 @@
+#!/bin/sh
+# Committed git pre-commit hook — scans STAGED changes for secrets with gitleaks.
+# Enabled via `git config core.hooksPath .githooks` (the devcontainer does this
+# automatically in postCreateCommand; run it once by hand on a fresh host clone).
+# See docs/devcontainer.md ("Git hooks"). gitleaks is pinned to v8.30.1 to match CI.
+exec gitleaks protect --staged --redact -c .gitleaks.toml
