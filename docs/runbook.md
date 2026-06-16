@@ -75,12 +75,22 @@ aws ssm put-parameter \
 **2. Initialise the database.** Creates the Postgres roles, the IAM-auth users
 (`lv_reader` / `lv_writer` — no passwords; they authenticate with RDS IAM tokens), the
 schema, and seeds the `FXCADUSD` indicator row.
+
+RDS is private (no IGW/NAT, not publicly accessible), so reach it through the EC2 Instance
+Connect Endpoint (EICE) tunnel — RDS never goes public; the tunnel is IAM-authenticated and
+CloudTrail-logged (ADR-0008). Needs the AWS CLI v2, an SSH client, `psql`, and `jq`.
+
 ```bash
-just loonvault-db-init "$(terraform -chdir=infra/loonvault output -raw rds_endpoint)"
+# terminal 1 — open the tunnel (blocks; Ctrl-C when done)
+just db-tunnel
+# terminal 2 — run db-init through localhost:5432
+just loonvault-db-init
 ```
-> Requires network access to RDS (private subnet) — run from a host with VPC access or a
-> bastion. There is **no Secrets Manager step**: application DB auth is RDS IAM auth
-> (ADR-0006), so there is no credential to populate.
+> `loonvault-db-init` runs `scripts/db-init.sql` as the RDS **master** user (the only role
+> that can create the lv_reader/lv_writer users + grant `rds_iam`). It fetches the
+> RDS-managed master password from Secrets Manager. This is the **only** use of the master
+> credential — application DB auth is RDS IAM (ADR-0006), so there is no app credential to
+> populate. The EICE + bastion are ephemeral (destroyed by `loonvault-destroy`).
 
 ## Verify
 
@@ -96,8 +106,8 @@ just loonvault-destroy
 ```
 
 `loonvault-destroy` tears down the **entire backend** — RDS (+ its managed master secret),
-VPC, Lambdas, API Gateway, SQS, the `raw` bucket, and the **`main` CMK** (which enters a
-pending-deletion window and is not billed). The always-on **`frontend` stack** (public
+VPC, Lambdas, API Gateway, SQS, the `raw` bucket, the **EICE + db-init bastion**, and the
+**`main` CMK** (which enters a pending-deletion window and is not billed). The always-on **`frontend` stack** (public
 snapshots bucket) and the **bootstrap** state backend are separate stacks and are untouched —
 the parked frontend keeps serving the last-written snapshots via Cloudflare. Re-running `apply`
 recreates the backend; note that the RDS instance gets a **new resource ID**, so the

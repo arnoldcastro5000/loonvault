@@ -104,10 +104,35 @@ frontend-apply:
     terraform fmt -recursive -check infra/
     cd infra/frontend && terraform validate && terraform apply
 
-# Initialise loonvault Postgres schema (run once after loonvault-apply)
-# Requires RDS connectivity — run from a host with VPC access or via bastion
-loonvault-db-init RDS_ENDPOINT DB_NAME="loonvault" DB_USER="loonvault_admin":
-    psql "host={{ RDS_ENDPOINT }} dbname={{ DB_NAME }} user={{ DB_USER }} sslmode=verify-full" \
+# Open an IAM-authenticated SSH tunnel to RDS via EICE — localhost:5432 → RDS:5432.
+# Run in a DEDICATED terminal (it blocks); Ctrl-C to close. Then run `just loonvault-db-init`
+# in another terminal. Requires the AWS CLI v2 + an SSH client. See ADR-0008 / docs/runbook.md.
+db-tunnel:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    RDS=$(terraform -chdir=infra/loonvault output -raw rds_endpoint 2>/dev/null || true)
+    IID=$(terraform -chdir=infra/loonvault output -raw admin_instance_id 2>/dev/null || true)
+    if [ -z "$RDS" ] || [ -z "$IID" ]; then
+      echo "Backend not applied (no rds_endpoint/admin_instance_id outputs)." >&2
+      echo "Run 'just loonvault-apply' first." >&2
+      exit 1
+    fi
+    echo "EICE tunnel: localhost:5432 -> ${RDS}:5432 via ${IID}. Ctrl-C to close."
+    exec aws ec2-instance-connect ssh --instance-id "$IID" --connection-type eice \
+      --os-user ec2-user --local-forwarding "5432:${RDS}:5432"
+
+# Initialise loonvault Postgres schema (run once after loonvault-apply).
+# Requires an open tunnel — start `just db-tunnel` in another terminal first.
+# Fetches the RDS master password from Secrets Manager and runs db-init.sql via localhost.
+# Requires psql + jq on the host.
+loonvault-db-init:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SECRET_ARN=$(terraform -chdir=infra/loonvault output -raw master_secret_arn)
+    PGPASSWORD=$(aws secretsmanager get-secret-value --secret-id "$SECRET_ARN" \
+      --query SecretString --output text | jq -r .password)
+    export PGPASSWORD
+    psql "host=127.0.0.1 port=5432 dbname=loonvault user=loonvault_admin sslmode=require" \
          -f scripts/db-init.sql
 
 # Format all Terraform files in-place

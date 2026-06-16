@@ -48,3 +48,9 @@ variable "vpc_cidr" {
   type        = string
   default     = "10.0.0.0/16"
 }
+
+variable "reserved_concurrency_enabled" {
+  description = "Set per-function Lambda reserved concurrency (G-02 flood protection). Requires the account Lambda concurrency quota above the default 10 — new accounts start at 10, leaving nothing to reserve. Raise Service Quotas L-B99A9384 (Lambda 'Concurrent executions') to 1000, then set this true."
+  type        = bool
+  default     = false
+}
