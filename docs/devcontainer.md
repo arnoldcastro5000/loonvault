@@ -28,7 +28,8 @@ bash .devcontainer/validate.sh
 - Container runs as the **`node`** user (not root).
 - Claude Code installed via `https://claude.ai/install.sh` to `~/.local/bin/claude`;
   `/home/node/.local/bin` is on `PATH`.
-- `gitleaks` installed from the latest GitHub release to `/usr/local/bin`.
+- `gitleaks` installed to `/usr/local/bin`, pinned to **v8.30.1** (matches the CI `secrets`
+  workflow and the committed `.githooks/pre-commit` hook — see "Git hooks").
 - `terraform` (pinned **1.9.8**, matching CI's `~1.9` and the stacks' `>= 1.9`) installed from
   `releases.hashicorp.com` to `/usr/local/bin`. For **offline static checks only** (`fmt`,
   `validate`) — see "Intentionally absent" for why apply/plan/init still run on the host.
@@ -55,6 +56,27 @@ dnsutils aggregate jq nano vim bubblewrap socat`.
   Identity Center sessions. (See the comment block in the Dockerfile.)
 - **`aws` CLI** and **`gcloud`** — not on `PATH`. `validate.sh` asserts both are absent;
   no cloud credential tooling exists in the container.
+
+## Git hooks
+
+Secret scanning runs on every commit via a **committed** git hook, `.githooks/pre-commit`,
+which runs `gitleaks protect --staged` against the staged changes and blocks the commit if it
+finds a secret (config: `.gitleaks.toml`, the same 8 custom rules CI uses).
+
+The hook is enabled by pointing git at the committed folder:
+
+```
+git config core.hooksPath .githooks
+```
+
+- **In the devcontainer** this runs automatically (`postCreateCommand` in `devcontainer.json`),
+  so the hook is active with no manual step.
+- **On a fresh host clone** (outside the container), run that one command once. Because `.git/`
+  is in the bind-mounted workspace, setting it in either place covers both.
+
+This replaces the older hand-written `.git/hooks/pre-commit` script (which lived only in `.git/`,
+unversioned and unshared). `gitleaks` is pinned to **v8.30.1** in the Dockerfile so the local
+hook and CI catch leaks identically.
 
 ## Environment variables
 

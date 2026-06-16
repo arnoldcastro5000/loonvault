@@ -36,8 +36,9 @@ RUN chmod +x /usr/local/bin/init-firewall.sh \
   && echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall \
   && chmod 0440 /etc/sudoers.d/node-firewall
 
-RUN GITLEAKS_VERSION=$(curl -fsSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest \
-    | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/') \
+# gitleaks pinned to v8.30.1 to match the CI `secrets` workflow and the committed
+# .githooks/pre-commit hook, so a leak is caught identically locally and in CI.
+RUN GITLEAKS_VERSION=8.30.1 \
   && curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
     | tar -xz -C /usr/local/bin gitleaks
 
