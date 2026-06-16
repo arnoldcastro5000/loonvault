@@ -29,6 +29,9 @@ bash .devcontainer/validate.sh
 - Claude Code installed via `https://claude.ai/install.sh` to `~/.local/bin/claude`;
   `/home/node/.local/bin` is on `PATH`.
 - `gitleaks` installed from the latest GitHub release to `/usr/local/bin`.
+- `terraform` (pinned **1.9.8**, matching CI's `~1.9` and the stacks' `>= 1.9`) installed from
+  `releases.hashicorp.com` to `/usr/local/bin`. For **offline static checks only** (`fmt`,
+  `validate`) — see "Intentionally absent" for why apply/plan/init still run on the host.
 
 ## Installed packages
 
@@ -45,10 +48,11 @@ dnsutils aggregate jq nano vim bubblewrap socat`.
 
 ### Intentionally absent
 
-- **Terraform** — not installed. AWS credentials never enter the devcontainer, so
-  `terraform apply/plan/init` cannot run here. All Terraform operations run on the
-  developer's host using short-lived IAM Identity Center sessions; static checks (`fmt`,
-  `validate`, `tflint`) are enforced by CI. (See the comment block in the Dockerfile.)
+- **Terraform `apply`/`plan`/`init`/`destroy`** — not runnable here. The `terraform` binary
+  *is* installed (see above), but only for offline static checks (`fmt`, `validate`). AWS
+  credentials never enter the devcontainer, so any credentialed/network operation
+  (`apply`, `plan`, `init`, `destroy`) runs on the developer's host using short-lived IAM
+  Identity Center sessions. (See the comment block in the Dockerfile.)
 - **`aws` CLI** and **`gcloud`** — not on `PATH`. `validate.sh` asserts both are absent;
   no cloud credential tooling exists in the container.
 
@@ -101,6 +105,15 @@ Declared in `devcontainer.json`:
 | `/home/node/.claude` | named volume | persists Claude Code config across rebuilds |
 | `/workspace` | bind mount (`localWorkspaceFolder`) | the repository, `consistency=delegated` |
 | `/workspace/.devcontainer/firewall-extra-domains.txt` | bind mount, **read-only** | extra egress allowlist entries, edited on the host |
+| `/home/node/.config/loonvault/agent.pem` | bind mount, **read-only** | GitHub App (`loonvault-agent`) private key, so the agent can mint short-lived installation tokens (`just gh-token`) to push branches + open PRs |
+
+### GitHub App key — a bounded, deliberate exception
+
+AWS credentials never enter the container (above), but the GitHub App private key is mounted read-only so the agent can push branches and open PRs on its own. This is a deliberate, bounded exception, not a contradiction of the credential-free stance:
+
+- The App's permissions are **Contents/Pull-requests write only — no merge, no Administration**. The `protect-main` ruleset requires a human approval the App cannot self-provide, so the worst a prompt-injection-compromised agent can do is **open a PR a human still has to review and merge** (the T-051 mitigation: all AI changes pass CI + human review before reaching `main`).
+- The key is read-only and only usable for this one bounded App; egress is firewall-limited to GitHub, so exfiltration buys an attacker only the same "open a PR" capability the agent already has.
+- The host must place the key at `~/.config/loonvault/agent.pem` **before** the container starts (a bind mount whose source is missing will fail or create a directory).
 
 ## Container capabilities and startup
 
