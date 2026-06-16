@@ -87,7 +87,7 @@ resource "aws_security_group" "lambda" {
 # RDS SG — SG-to-SG ingress only (OPA invariant: no CIDR blocks)
 resource "aws_security_group" "rds" {
   name        = "${local.name_prefix}-rds"
-  description = "LoonVault RDS Postgres — ingress from Lambda SG only"
+  description = "LoonVault RDS Postgres - ingress from Lambda SG only"
   vpc_id      = aws_vpc.main.id
 
   tags = { Name = "${local.name_prefix}-rds" }
