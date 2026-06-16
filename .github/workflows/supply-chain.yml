@@ -20,11 +20,30 @@ jobs:
           persist-credentials: false
 
       - name: pip-audit
-        if: hashFiles('**/requirements*.txt', '**/pyproject.toml') != ''
+        if: hashFiles('**/requirements*.txt', '**/requirements*.lock', '**/pyproject.toml') != ''
+        shell: bash
         run: |
           pip install pip-audit==2.10.1
-          find . -name 'requirements*.txt' -not -path '*/.venv/*' \
-            -exec pip-audit -r {} \;
+          # NOTE: `find ... -exec pip-audit ...` returns find's exit code, not pip-audit's,
+          # so a CVE never failed this job. Accumulate status explicitly and exit non-zero
+          # if any file has a vulnerability.
+          status=0
+          # Audit the hash-pinned lockfiles first: they are the full transitive closure that
+          # actually gets deployed (loonvault-build installs from these with --require-hashes).
+          # --no-deps audits the pinned set as-is, without re-resolving.
+          while IFS= read -r -d '' lock; do
+            echo "::group::pip-audit (lock) $lock"
+            pip-audit --no-deps -r "$lock" || status=1
+            echo "::endgroup::"
+          done < <(find . -name 'requirements*.lock' -not -path '*/.venv/*' -print0)
+          # Audit any requirements.txt that has no sibling lockfile (direct deps only).
+          while IFS= read -r -d '' req; do
+            [ -f "${req%.txt}.lock" ] && continue
+            echo "::group::pip-audit (req) $req"
+            pip-audit -r "$req" || status=1
+            echo "::endgroup::"
+          done < <(find . -name 'requirements*.txt' -not -path '*/.venv/*' -print0)
+          exit "$status"
 
       - name: npm audit
         if: hashFiles('frontend/package.json') != ''
