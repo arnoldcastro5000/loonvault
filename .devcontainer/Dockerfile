@@ -41,10 +41,16 @@ RUN GITLEAKS_VERSION=$(curl -fsSL https://api.github.com/repos/gitleaks/gitleaks
   && curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
     | tar -xz -C /usr/local/bin gitleaks
 
-# Terraform is intentionally NOT installed here.
-# AWS credentials never enter the devcontainer; terraform apply/plan/init cannot run.
-# All Terraform operations (apply, destroy, plan) run on the developer's host terminal
-# using short-lived IAM Identity Center sessions. Static checks (fmt, validate, tflint)
-# are enforced by CI — no local Terraform binary required.
+# Terraform installed for OFFLINE static checks only (fmt, validate), so changes can be
+# formatted/validated before pushing. Pinned to 1.9.x to match CI (terraform_version "~1.9")
+# and the stacks' required_version ">= 1.9" — a newer line can change `fmt` output.
+# AWS credentials never enter the devcontainer, so apply/destroy/plan/init are NOT run here;
+# all credentialed Terraform operations run on the developer's host terminal using
+# short-lived IAM Identity Center sessions.
+RUN TERRAFORM_VERSION=1.9.8 \
+  && curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" -o /tmp/terraform.zip \
+  && unzip -q /tmp/terraform.zip -d /usr/local/bin \
+  && rm /tmp/terraform.zip \
+  && terraform version
 
 USER node

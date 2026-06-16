@@ -151,3 +151,9 @@ verify-docs:
 # Deploy frontend static site to S3 (outside devcontainer)
 deploy-frontend:
     cd frontend && npm run build && aws s3 sync out/ s3://loonvault-frontend/
+
+# Mint a ~1h GitHub App installation token for the loonvault-agent App (prints to stdout).
+# The App private key must be at $GH_APP_KEY_FILE (default ~/.config/loonvault/agent.pem).
+# Usage: export GH_TOKEN=$(just gh-token)   then use gh / git as the App.
+gh-token:
+    GH_APP_ID=4064157 GH_APP_INSTALLATION_ID=140557738 bash scripts/gh-app-token.sh

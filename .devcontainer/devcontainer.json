@@ -11,7 +11,8 @@
   "mounts": [
     "source=claude-code-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
     "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume",
-    "source=${localWorkspaceFolder}/.devcontainer/firewall-extra-domains.txt,target=/workspace/.devcontainer/firewall-extra-domains.txt,type=bind,readonly"
+    "source=${localWorkspaceFolder}/.devcontainer/firewall-extra-domains.txt,target=/workspace/.devcontainer/firewall-extra-domains.txt,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/loonvault/agent.pem,target=/home/node/.config/loonvault/agent.pem,type=bind,readonly"
   ],
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",
