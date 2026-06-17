@@ -1,6 +1,10 @@
 [extend]
 useDefault = true
 
+[allowlist]
+description = "Accepted: AWS account IDs were published in efd84b9 (PR #22) before being classified non-public. An account ID cannot be rotated, so a leak with no rotation path is recorded here as an accepted exception rather than rewriting public history. New occurrences are still caught by aws-account-id-bare."
+commits = ["efd84b9e1127c200cb33b503d89788be74b9b996"]
+
 [[rules]]
 id = "aws-account-id-arn"
 description = "AWS account ID embedded in ARN"
@@ -47,4 +51,14 @@ secretGroup = 1
 id = "aws-account-id-array-element"
 description = "AWS account ID as a bare quoted array element (following a comma)"
 regex = ''',\s*"(\d{12})"'''
+secretGroup = 1
+
+# Catch-all: any bare 12-digit token. AWS account IDs are treated as non-public
+# (threat model §3). Generic by design — no account ID is hardcoded here. The only
+# 12-digit tokens that legitimately appear in this repo are account IDs; if a genuine
+# non-account 12-digit number is ever needed, allowlist that specific instance.
+[[rules]]
+id = "aws-account-id-bare"
+description = "Bare 12-digit AWS account ID (any context, incl. prose)"
+regex = '''\b(\d{12})\b'''
 secretGroup = 1

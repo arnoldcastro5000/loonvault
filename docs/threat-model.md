@@ -315,6 +315,30 @@ These threats arise specifically from the public posture: full code publication 
 
 ---
 
+### 5.15 Autonomous AWS-credentialed agent (Agent 2)
+
+These threats arise from the second Claude agent introduced in ADR-0010: a **read-only** "Verifier" (Agent 2) that runs `validate`/`plan` against the workloads account from its own isolated devcontainer, with `--dangerously-skip-permissions` (no per-action human approval) on its read/plan loop, and coordinates with the GitHub-capable "Reviewer" (Agent 1) through a shared `/handoff` mount. The **write** credential is deliberately *not* in Agent 2: mutation runs in a separate, non-LLM **apply runner** that holds the write role and enforces the OPA plan-policy gate where the injectable agent cannot bypass it.
+
+| ID | Cat | Threat | TA | D | R | E | A | Di | Score | Sev |
+|---|---|---|---|---|---|---|---|---|---|---|
+| T-052 | E | Autonomous, AWS-credentialed Agent 2 — running with `--dangerously-skip-permissions` (no per-action approval) — is steered by prompt injection (malicious Terraform error output, a compromised dependency, or a handoff file) into abusing its standing AWS credential or attempting exfiltration | SC MI | 5 | 5 | 5 | 3 | 6 | **4.8** | Medium |
+| T-053 | T | Compromised Agent 2 writes a prompt-injection payload into the shared `/handoff` mount that steers the GitHub-credentialed Agent 1 into committing a malicious change or opening a hostile PR (cross-trust-boundary pivot) | MI | 6 | 4 | 4 | 3 | 6 | **4.6** | Medium |
+
+**Mitigating controls (T-052):** This is the controlling rationale for why `--dangerously-skip-permissions` is acceptable on Agent 2 despite the bank-grade posture. The flag removes only the *in-session, discretionary* approval prompt — the weakest and least auditable control, prone to approval fatigue — and the project replaces it with stronger, *mandatory and out-of-band* controls layered beneath:
+
+- **Containment:** Agent 2 runs non-root in a dedicated devcontainer (the CLI refuses the flag as root) with command execution confined to the container.
+- **Egress firewall (default-deny):** even with every command auto-approved, Agent 2 can reach only the Claude API, the AWS `ca-central-1` endpoints, and the Terraform registry — no GitHub, no arbitrary host — so exfiltration is bounded. Anthropic's own guidance explicitly pairs the flag with egress restriction.
+- **Least-privilege, short-lived credentials:** the only credential in Agent 2 is a **read-only** IAM Identity Center session, scoped to account `<MEMBER_ACCOUNT_ID>` and the `infra/loonvault` stack, expiring automatically (≤12h). No static keys, no mounted credential files (per Anthropic's "do not mount cloud credential files" caveat). The **write** credential is never in the injectable agent at all — it lives in the separate apply runner, so a compromised Agent 2 cannot mutate infrastructure even by ignoring its own tooling.
+- **Deterministic plan-policy gate:** `terraform apply` is gated by an OPA/Conftest evaluation of the plan JSON (the reused-and-extended Phase 0 control) that denies destructive replace/delete of stateful resources, IAM/SG widening, and over-budget blast radius, escalating to a human only when a rule trips — a fatigue-proof control rather than a rubber-stamp. Agent 2 is read-only until that gate exists.
+- **Preventive guardrail:** the ADR-0009 region-lock SCP denies any action outside `ca-central-1` and exempts the management account, holding even if the agent misbehaves.
+- **Detective + reversible:** a **persistent org-level CloudTrail** in the management account (covering the Workloads OU) records every AWS API call the member-account agent and apply runner make. Because it is an organization trail, the member account *cannot modify, delete, or read* it ([AWS Organizations + CloudTrail](https://docs.aws.amazon.com/organizations/latest/userguide/services-that-can-integrate-cloudtrail.html)), so a compromised Agent 2 cannot erase its own audit trail. This delivers **auditability** (after-the-fact reconstruction); real-time alerting on agent-specific anomalies is Phase 3 work. Separately, nothing Agent 1 produces reaches `main` without PR, human review, and the CI gate. Like the OPA gate, this trail is a Phase 0 prerequisite — until it exists the apply path does not run.
+
+The acceptance is contingent on all of the above — skip-permissions would *not* be acceptable on the apply role, with static credentials, without the firewall, or against the management account. Enforced via managed settings: `permissions.disableBypassPermissionsMode` is set to `"disable"` in Agent 1's container (GitHub-credentialed, interactive), so the flag is permitted in exactly one bounded, firewalled, read-only place. See ADR-0010.
+
+**Mitigating controls (T-053):** The shared `/handoff` bind mount is a deliberate coupling channel between a GitHub-capable container (Agent 1) and an AWS-capable one (Agent 2); a compromised Agent 2 could write attacker-controlled text into it. Agent 1 treats all handoff content as *untrusted data, never instructions* — it reasons over a Terraform error as data and never executes anything sourced from a handoff file (the same discipline as T-051). The directory is split `in/` (Agent 2 writes, Agent 1 reads) and `out/` (Agent 1 writes, Agent 2 reads) so the trust flow is one-directional per path. The T-051 controls still apply downstream: any change Agent 1 is steered to make must pass human PR review and the full CI gate (Semgrep / Checkov / OPA / regal) before reaching `main`. Residual risk mirrors T-051 — a subtle, plausible change that survives both human review and static analysis.
+
+---
+
 ## 6. All Threats — Ranked by DREAD Score
 
 | Score | Sev | ID | Cat | Threat |
@@ -357,8 +381,10 @@ These threats arise specifically from the public posture: full code publication 
 | **4.8** | Med | T-030 | I | S3 raw zone exposed publicly (drift) |
 | **4.8** | Med | T-031 | T | S3 versioning disabled via drift |
 | **4.8** | Med | T-035 | D | IAM/STS outage blocks RDS token validation |
+| **4.8** | Med | T-052 | E | Autonomous Agent 2 (skip-permissions) steered into AWS credential abuse |
 | **4.6** | Med | T-003 | S | CF Access JWT stolen — admin plane accessed |
 | **4.6** | Med | T-015 | I | Transform Lambda logs RDS IAM auth token |
+| **4.6** | Med | T-053 | T | Compromised Agent 2 pivots into Agent 1 via shared handoff |
 | **4.4** | Med | T-021 | S | CF Access JWT replayed |
 | **4.4** | Med | T-033 | E | Role widened to rds-db:connect on higher-priv dbuser |
 | **4.4** | Med | T-043 | T | GitHub Actions script injection |
@@ -371,7 +397,7 @@ These threats arise specifically from the public posture: full code publication 
 | **3.6** | Low | T-044 | I | Terraform state exposes infrastructure topology |
 | **3.6** | Low | T-047 | D | Frontend S3 unavailable |
 
-**Score distribution:** 0 Critical · 12 High · 34 Medium · 5 Low (51 threats)
+**Score distribution:** 0 Critical · 12 High · 36 Medium · 5 Low (53 threats)
 
 No Critical findings. The three new threats introduced by the public posture (T-048, T-049, T-050) all score High — they represent genuine elevated risk from publication but are mitigated by the principle that the controls are designed to work even when fully described.
 
@@ -411,6 +437,7 @@ The following risks are known, accepted for this POC, and documented with produc
 | **Single AWS account** | T-041 T-045 | Budget and complexity constraint | Multi-account AWS Organizations: separate accounts for prod, dev, and audit trail |
 | **No Object Lock on S3 raw zone** | T-029 T-031 | Stretch goal; versioning alone preserves history | Enable Object Lock in COMPLIANCE mode with a retention period matching Protected B audit requirements |
 | **Developer workstation = single apply path** | T-041 | Deliberate design (no CI credentials); workstation compromise = full control | Bastion/jump host with session recording; dual-approval for destructive operations (`terraform destroy`) |
+| **Autonomous Agent 2 with `--dangerously-skip-permissions`** — no per-action approval on the read/plan loop | T-052 T-053 | The discretionary prompt is replaced by mandatory controls: dedicated container + default-deny egress firewall + read-only short-lived creds + out-of-band apply gate + ADR-0009 region-lock SCP + CloudTrail + human PR review. Confined to one bounded container via `disableBypassPermissionsMode` in managed settings. See ADR-0010 | Run the agent under auto mode (classifier-reviewed actions) instead of full bypass; dual-approval and session recording for any agent-initiated apply |
 | **SHA-pinned Actions residual supply chain risk** | T-040 | Zero-day compromise of a pinned SHA undetectable without independent verification | Sigstore/cosign for signed Actions verification; SLSA attestations for dependencies |
 | **RDS IAM auth control-plane dependency** | T-035 | DB token validation depends on the IAM/STS control plane (us-east-1); warm DB connections survive a brief blip since tokens are only needed at connect time | Regional STS endpoint (in place); accept bounded connect-time failure during a control-plane outage as residual |
 | **Single shared CMK for S3 raw zone, RDS, and Secrets Manager** | T-034 | Budget constraint (~$10/mo ceiling); $1/CMK/month makes per-service keys a $2/month premium — see ADR-0005. S3 snapshots bucket uses SSE-S3, not this CMK, because public reads cannot decrypt SSE-KMS objects. | Separate CMKs per service with independent key policies and rotation schedules |
@@ -437,7 +464,8 @@ The table below confirms at least one threat was modelled per STRIDE category pe
 | Terraform State | — | T-045 | — | T-044 | — | — |
 | Frontend S3 | — | T-046 | — | — | T-047 | — |
 | Public posture / AI scanning | — | T-042 T-048 T-051 | T-049 | T-050 | — | T-048 |
+| Autonomous agent team (Agent 1/2) | — | T-053 | — | — | — | T-052 |
 
 ---
 
-*This document is the Phase 3 deliverable referenced in `plan.md`. Update it whenever the architecture changes. The attack-and-defense demonstrations in Phase 4 (`docs/attack-demos/`) are the live evidence that the mitigating controls listed here actually work. Version history: 1.0 — initial model; 1.1 — updated for public GitHub posture and AI-enhanced scanning threat actor.*
+*This document is the Phase 3 deliverable referenced in `plan.md`. Update it whenever the architecture changes. The attack-and-defense demonstrations in Phase 4 (`docs/attack-demos/`) are the live evidence that the mitigating controls listed here actually work. Version history: 1.0 — initial model; 1.1 — updated for public GitHub posture and AI-enhanced scanning threat actor; 1.2 — added autonomous multi-agent threats (T-052, T-053) for the Agent 2 Terraform executor and the `--dangerously-skip-permissions` posture (ADR-0010).*
