@@ -48,3 +48,13 @@ id = "aws-account-id-array-element"
 description = "AWS account ID as a bare quoted array element (following a comma)"
 regex = ''',\s*"(\d{12})"'''
 secretGroup = 1
+
+# Catch-all: any bare 12-digit token. AWS account IDs are treated as non-public
+# (threat model §3). Generic by design — no account ID is hardcoded here. The only
+# 12-digit tokens that legitimately appear in this repo are account IDs; if a genuine
+# non-account 12-digit number is ever needed, allowlist that specific instance.
+[[rules]]
+id = "aws-account-id-bare"
+description = "Bare 12-digit AWS account ID (any context, incl. prose)"
+regex = '''\b(\d{12})\b'''
+secretGroup = 1

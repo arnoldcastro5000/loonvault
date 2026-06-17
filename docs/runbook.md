@@ -44,7 +44,7 @@ terraform -chdir=infra/org output -raw root_id           # source parent
 terraform -chdir=infra/org output -raw workloads_ou_id   # destination parent
 # Move the workloads account into the OU (one-time):
 aws organizations move-account \
-  --account-id 142083399482 \
+  --account-id <MEMBER_ACCOUNT_ID> \
   --source-parent-id "$(terraform -chdir=infra/org output -raw root_id)" \
   --destination-parent-id "$(terraform -chdir=infra/org output -raw workloads_ou_id)" \
   --profile loonvault
