@@ -72,7 +72,7 @@ TF_BOOTSTRAP=$(grep -c '^resource "' infra/bootstrap/main.tf || true)
 check "bootstrap Terraform resource count" "$TF_BOOTSTRAP" "9"
 
 TF_ORG=$(grep -c '^resource "' infra/org/main.tf || true)
-check "org Terraform resource count" "$TF_ORG" "2"
+check "org Terraform resource count" "$TF_ORG" "3"
 
 # ── Phase gate ────────────────────────────────────────────────────────────────
 echo

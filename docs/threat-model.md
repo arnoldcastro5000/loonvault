@@ -379,21 +379,21 @@ No Critical findings. The three new threats introduced by the public posture (T-
 
 ## 7. Control Gaps
 
-The following gaps were identified during this analysis. None create a Critical finding given existing compensating controls, but each should be tracked to closure.
+The following gaps were identified during this analysis. None create a Critical finding given existing compensating controls. The **Status** column tracks closure; gaps marked Closed are remediated in `infra/loonvault/`.
 
-| # | Gap | Affected Threats | Priority | Recommended Fix |
-|---|---|---|---|---|
-| G-01 | SSM Parameter Store type for `X-Origin-Secret` not specified as SecureString | T-002 T-050 | High | Declare as `aws_ssm_parameter` with `type = "SecureString"` and KMS key reference in Terraform |
-| G-02 | No reserved concurrency on Read Lambda | T-017 | High | Set `reserved_concurrent_executions` in Lambda Terraform resource; size to expected peak + headroom |
-| G-03 | No CloudWatch alarm on SQS DLQ depth | T-016 | Medium | Add `ApproximateNumberOfMessagesVisible > 0` alarm on DLQ → SNS topic |
-| G-04 | No detection rule for KMS CMK lifecycle events | T-034 | Medium | Add EventBridge rule matching `DisableKey`, `ScheduleKeyDeletion`, `CancelKeyDeletion` |
-| G-05 | No detection rule for EventBridge rule modification | T-038 | Medium | Add EventBridge rule matching `PutRule`, `DeleteRule`, `DisableRule` |
-| G-06 | No explicit error sanitisation requirement in Lambda coding standards | T-009 | Medium | Add coding standard: all Lambda handlers must return opaque error messages to callers; internal details logged to CloudWatch only |
-| G-07 | No pgaudit (Postgres audit logging) | T-024 T-026 | Medium | Enable pgaudit via RDS parameter group; log DDL and DML for Protected B compliance |
-| G-08 | RDS snapshot sharing policy not specified | T-027 | Medium | Add Prowler/AWS Config rule detecting cross-account or public snapshot sharing |
-| G-09 | API Gateway access logging not explicitly configured | T-006 T-019 | Medium | Enable API GW access logging to CloudWatch Logs; add log format capturing IP, path, status, latency |
-| G-10 | No CloudWatch alarm on Lambda error rate or duration | Multiple | Low | Add alarms on `Errors` and `Duration` metrics per Lambda function |
-| G-11 | AccessDenied spike threshold (>5 in 5 min) is published and evadable | T-049 | Medium | Consider a secondary slower-window alarm (e.g., >20 in 30 min) to catch low-and-slow enumeration that stays below the primary threshold |
+| # | Gap | Affected Threats | Priority | Status | Recommended Fix |
+|---|---|---|---|---|---|
+| G-01 | SSM Parameter Store type for `X-Origin-Secret` not specified as SecureString | T-002 T-050 | High | **Closed** | Declared as `aws_ssm_parameter` with `type = "SecureString"` (`infra/loonvault/data.tf`) |
+| G-02 | No reserved concurrency on Read Lambda | T-017 | High | **Closed** | `reserved_concurrent_executions` set on Lambdas, var-gated (`infra/loonvault/compute.tf`) |
+| G-03 | No CloudWatch alarm on SQS DLQ depth | T-016 | Medium | **Closed** | `ApproximateNumberOfMessagesVisible >= 1` alarm on transform DLQ → SNS (`infra/loonvault/detection.tf`) |
+| G-04 | No detection rule for KMS CMK lifecycle events | T-034 | Medium | Open | Add EventBridge rule matching `DisableKey`, `ScheduleKeyDeletion`, `CancelKeyDeletion` |
+| G-05 | No detection rule for EventBridge rule modification | T-038 | Medium | Open | Add EventBridge rule matching `PutRule`, `DeleteRule`, `DisableRule` |
+| G-06 | No explicit error sanitisation requirement in Lambda coding standards | T-009 | Medium | Open | Add coding standard: all Lambda handlers must return opaque error messages to callers; internal details logged to CloudWatch only |
+| G-07 | No pgaudit (Postgres audit logging) | T-024 T-026 | Medium | **Closed** | pgaudit enabled via RDS parameter group (`infra/loonvault/data.tf`) |
+| G-08 | RDS snapshot sharing policy not specified | T-027 | Medium | Open | Add Prowler/AWS Config rule detecting cross-account or public snapshot sharing |
+| G-09 | API Gateway access logging not explicitly configured | T-006 T-019 | Medium | **Closed** | API GW stage `access_log_settings` → CloudWatch Logs (`infra/loonvault/api.tf`) |
+| G-10 | No CloudWatch alarm on Lambda error rate or duration | Multiple | Low | Open | Add alarms on `Errors` and `Duration` metrics per Lambda function |
+| G-11 | AccessDenied spike threshold (>5 in 5 min) is published and evadable | T-049 | Medium | Open | Consider a secondary slower-window alarm (e.g., >20 in 30 min) to catch low-and-slow enumeration that stays below the primary threshold |
 
 ---
 

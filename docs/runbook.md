@@ -29,6 +29,36 @@ holds no AWS credentials) with an active IAM Identity Center session.
    just frontend-apply
    ```
 
+## Org guardrails — region-lock SCP (one-time, management account)
+
+Run from the **management account** (`loonvault` profile), not the workloads account. This
+attaches the `ca-central-1` region-lock SCP to a **Workloads OU** and moves the member account
+into it (see ADR-0009; SCPs never restrict the management account, so the workloads must live in
+a member account under the OU for the guardrail to bite).
+
+```bash
+just org-init
+just org-apply                       # creates the Workloads OU + region-lock SCP, attaches at OU
+# Grab the IDs the apply printed:
+terraform -chdir=infra/org output -raw root_id           # source parent
+terraform -chdir=infra/org output -raw workloads_ou_id   # destination parent
+# Move the workloads account into the OU (one-time):
+aws organizations move-account \
+  --account-id <MEMBER_ACCOUNT_ID> \
+  --source-parent-id "$(terraform -chdir=infra/org output -raw root_id)" \
+  --destination-parent-id "$(terraform -chdir=infra/org output -raw workloads_ou_id)" \
+  --profile loonvault
+```
+
+Verify the guardrail (Phase-0 gate) from the **workloads** account (`loonvault-prod` profile):
+
+```bash
+# Expect an explicit Deny outside ca-central-1:
+aws ec2 describe-vpcs --region us-east-2 --profile loonvault-prod   # -> UnauthorizedOperation / explicit deny
+# Control still works in-region:
+aws ec2 describe-vpcs --region ca-central-1 --profile loonvault-prod  # -> succeeds
+```
+
 ## Deploy
 
 ```bash
