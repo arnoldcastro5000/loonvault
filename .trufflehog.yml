@@ -54,3 +54,11 @@ detectors:
       - '"AWS"'
     regex:
       account_id: ',\s*"(\d{12})"'
+
+  # Catch-all for the bare/prose form. trufflehog requires a keyword prefilter, so this
+  # is gated on "account"; gitleaks' aws-account-id-bare rule covers keyword-less forms.
+  - name: AWSAccountIDBare
+    keywords:
+      - account
+    regex:
+      account_id: '(?i)account[^\n]{0,40}?\b(\d{12})\b'
