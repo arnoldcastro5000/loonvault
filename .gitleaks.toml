@@ -1,10 +1,6 @@
 [extend]
 useDefault = true
 
-[allowlist]
-description = "Accepted: AWS account IDs were published in efd84b9 (PR #22) before being classified non-public. An account ID cannot be rotated, so a leak with no rotation path is recorded here as an accepted exception rather than rewriting public history. New occurrences are still caught by aws-account-id-bare."
-commits = ["efd84b9e1127c200cb33b503d89788be74b9b996"]
-
 [[rules]]
 id = "aws-account-id-arn"
 description = "AWS account ID embedded in ARN"
