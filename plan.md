@@ -213,7 +213,7 @@ Each phase leaves a deployable, secure thing — stop at any phase and still hav
   - *Prerequisite:* Enable AWS Organizations; import into Terraform state.
   - Terraform remote state (encrypted S3 + DynamoDB lock), SCP to enforce `ca-central-1`,
     CI with Checkov/Semgrep/pip-audit/betterleaks/OPA (pre-push hook)/gitleaks (pre-commit), CloudTrail +
-    logging baseline (management events + KMS/S3/Lambda data events).
+    logging baseline (management events — which include KMS cryptographic calls — plus S3/Lambda data events).
   → *Verify: a trivial PR passes every CI scan with no AWS credentials present; SCP blocks a `us-east-2` resource.*
 
 - **Phase 1 — Vertical slice:** one series → S3 raw → RDS → one public `GET`, fully secured.
@@ -257,8 +257,10 @@ answer its questions out loud, unaided.
       false security assurance. Why "it passed the scanners" ≠ "it's secure." What OPA cannot catch
       (post-deploy drift — that's Prowler).
 - [ ] What CloudTrail records (management vs data events); why data events are off by default
-      and what blind spot that creates (e.g. KMS Decrypt is invisible without data events);
-      why disabling CloudTrail must itself trigger an alert.
+      and what blind spot that creates (e.g. S3 object-level GetObject/PutObject and Lambda
+      Invoke are invisible without S3/Lambda data events — note KMS cryptographic calls like
+      Decrypt are *management* events, so they are captured without data events); why disabling
+      CloudTrail must itself trigger an alert.
 - [ ] Why the SCP enforcing `ca-central-1` matters even when all resources are intentionally
       deployed there — what it prevents that IAM policy alone cannot.
 
