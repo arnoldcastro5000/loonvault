@@ -52,5 +52,5 @@ regal lint policies/
 |---|---|---|---|
 | networking | No `0.0.0.0/0` / `::/0` ingress on admin ports 22/3389 | Cyber Security – Infrastructure security | — |
 | networking | DB ingress (5432) must be SG-to-SG (no CIDR) | Cyber Security – Infrastructure security | — |
-| storage | S3 Block Public Access: all four flags true; no public ACL | Cyber Security – Data security (at rest) | GR06 |
+| storage | Every bucket has a BPA (all four flags true); no public ACL; no public bucket policy | Cyber Security – Data security (at rest) | GR06 |
 | baseline | Provider region must be `ca-central-1` | Cyber Security – Infrastructure security | GR05 |
