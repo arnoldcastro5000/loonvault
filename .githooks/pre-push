@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# Committed git pre-push hook — OPA/conftest policy gate for Terraform changes.
+#
+# When a push includes changes to a gated infra stack, this regenerates that
+# stack's Terraform plan and evaluates it against policies/ with conftest, blocking
+# the push on any policy denial. It runs where AWS credentials live (your
+# terminal); the credential-free devcontainer/CI cannot generate a real plan, so
+# there CI only runs the policy UNIT tests (`conftest verify`).
+#
+# Enabled via `git config core.hooksPath .githooks` (devcontainer postCreateCommand
+# does this; run it once on a fresh host clone). Requires terraform, conftest
+# (see policies/README.md), and AWS credentials.
+# Bypass sparingly: `SKIP_POLICY_GATE=1 git push` or `git push --no-verify`.
+set -euo pipefail
+
+# Skip in the credential-free devcontainer (the Dockerfile sets DEVCONTAINER=true):
+# no AWS creds means no real plan. CI runs the unit tests; the human terminal gates.
+if [ "${DEVCONTAINER:-}" = "true" ]; then
+	echo "pre-push: devcontainer (no AWS creds) — skipping plan gate; CI runs policy unit tests."
+	exit 0
+fi
+
+if [ "${SKIP_POLICY_GATE:-0}" = "1" ]; then
+	echo "pre-push: SKIP_POLICY_GATE set — skipping policy gate."
+	exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+POLICY_DIR="$REPO_ROOT/policies"
+
+# Stacks the gate applies to. infra/frontend is intentionally EXCLUDED: its
+# snapshots bucket is a deliberate public-read exception that the storage policy
+# would (by its rules) deny. Add it here once the policy carries a documented
+# exception for that bucket.
+GATED_STACKS="loonvault"
+
+zero="0000000000000000000000000000000000000000"
+
+# The set of file paths across all ref updates being pushed (read from stdin per
+# the githooks pre-push protocol: "<local_ref> <local_sha> <remote_ref> <remote_sha>").
+changed_files() {
+	local local_ref local_sha remote_ref remote_sha range
+	while read -r local_ref local_sha remote_ref remote_sha; do
+		[ "$local_sha" = "$zero" ] && continue # branch deletion
+		if [ "$remote_sha" = "$zero" ]; then
+			if git rev-parse --verify --quiet origin/main >/dev/null; then
+				range="origin/main..$local_sha"
+			else
+				range="$local_sha"
+			fi
+		else
+			range="$remote_sha..$local_sha"
+		fi
+		git diff --name-only "$range" 2>/dev/null || true
+	done | sort -u
+}
+
+gate_stack() {
+	local stack="$1" dir="infra/$1"
+	echo ">> policy gate: $stack"
+	command -v terraform >/dev/null || {
+		echo "ERROR: terraform not found (needed to plan $stack)." >&2
+		return 1
+	}
+	command -v conftest >/dev/null || {
+		echo "ERROR: conftest not found — see policies/README.md for the pinned install." >&2
+		return 1
+	}
+	[ -d "$REPO_ROOT/$dir/.terraform" ] || {
+		echo "ERROR: $dir not initialized — run 'just ${stack}-init'." >&2
+		return 1
+	}
+
+	local var_args=()
+	[ -f "$REPO_ROOT/$dir/terraform.tfvars" ] && var_args=(-var-file=terraform.tfvars)
+
+	local tmp
+	tmp="$(mktemp -d)"
+	(
+		cd "$REPO_ROOT/$dir" || exit 1
+		terraform plan "${var_args[@]}" -out="$tmp/plan.bin" || exit 1
+		terraform show -json "$tmp/plan.bin" >"$tmp/plan.json" || exit 1
+	) || {
+		rm -rf "$tmp"
+		return 1
+	}
+	conftest test --all-namespaces -p "$POLICY_DIR" "$tmp/plan.json"
+	local crc=$?
+	rm -rf "$tmp"
+	return "$crc"
+}
+
+mapfile -t FILES < <(changed_files)
+[ "${#FILES[@]}" -eq 0 ] && exit 0
+
+rc=0
+for stack in $GATED_STACKS; do
+	if printf '%s\n' "${FILES[@]}" | grep -q "^infra/$stack/.*\.tf"; then
+		gate_stack "$stack" || rc=1
+	fi
+done
+
+if [ "$rc" -ne 0 ]; then
+	echo "pre-push: policy gate FAILED — push blocked. Fix the denials above, or bypass with 'git push --no-verify'." >&2
+	exit 1
+fi
+echo "pre-push: policy gate passed (no gated stack changed, or all plans compliant)."
+exit 0

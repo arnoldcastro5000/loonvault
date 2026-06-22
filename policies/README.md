@@ -46,6 +46,23 @@ conftest test --all-namespaces -p policies tfplan.json
 regal lint policies/
 ```
 
+## Enforcement (where these run)
+
+Layered, matching LoonVault's credential-free-CI stance:
+
+- **CI (`lint` job)** — runs the **unit tests** (`conftest verify`) + `regal` + the compliance-matrix `--check`. No AWS creds, so it validates the *policies*, not a live plan. Pinned: `conftest 0.56.0`, `opa 1.17.0`, `regal 0.41.1`.
+- **Pre-push hook** (`.githooks/pre-push`) — on your terminal, where creds live: for a changed gated stack it runs `terraform plan` → `terraform show -json` → `conftest test`, blocking the push on a denial. Skips automatically in the devcontainer (`DEVCONTAINER=true`, no creds) and via `SKIP_POLICY_GATE=1` / `git push --no-verify`.
+- **`just` recipes** — `just policy-test` (unit tests); `just loonvault-plan` / `just loonvault-apply` plan, run the conftest gate, and (apply) prompt before applying the reviewed plan.
+
+**Scope:** the plan-gate currently covers the **`loonvault`** stack only. `infra/frontend` is excluded — its snapshots bucket is a deliberate public-read exception that the storage policy would deny; gating it needs a documented policy exception first.
+
+**Install conftest on your terminal** (pinned to match CI):
+```bash
+curl -sSLo /tmp/conftest.tgz \
+  "https://github.com/open-policy-agent/conftest/releases/download/v0.56.0/conftest_0.56.0_Linux_x86_64.tar.gz"
+sudo tar xzf /tmp/conftest.tgz -C /usr/local/bin conftest
+```
+
 ## Rules (v1)
 
 | Pattern | Rule | OSFI B-13 | GC |
