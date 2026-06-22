@@ -148,6 +148,10 @@ scan:
 verify-docs:
     bash scripts/verify-docs.sh
 
+# Regenerate the OSFI/GC compliance-coverage matrix from policy metadata (needs opa)
+compliance-report:
+    bash scripts/gen-compliance-matrix.sh
+
 # Deploy frontend static site to S3 (outside devcontainer)
 deploy-frontend:
     cd frontend && npm run build && aws s3 sync out/ s3://loonvault-frontend/

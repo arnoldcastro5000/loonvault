@@ -74,6 +74,15 @@ check "bootstrap Terraform resource count" "$TF_BOOTSTRAP" "9"
 TF_ORG=$(grep -c '^resource "' infra/org/main.tf || true)
 check "org Terraform resource count" "$TF_ORG" "3"
 
+# ── Compliance matrix (compliance-as-code) ─────────────────────────────────────
+echo
+echo "--- Compliance matrix ---"
+# policies/COMPLIANCE.md is generated from policy metadata by
+# scripts/gen-compliance-matrix.sh. This is a lightweight presence/count check; the
+# authoritative no-drift check (regenerate + diff, needs opa) runs in the lint CI job.
+COMPLIANCE_ROWS=$(grep -cE '\| `patterns\.' policies/COMPLIANCE.md || true)
+check "compliance matrix policy count" "$COMPLIANCE_ROWS" "3"
+
 # ── Phase gate ────────────────────────────────────────────────────────────────
 echo
 echo "--- Phase gates ---"
