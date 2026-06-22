@@ -61,7 +61,7 @@ check "all Actions SHA-pinned (no bare @vX.Y.Z)" "$UNPINNED" "0"
 
 _ci_has "gitleaks version v8.30.1 in CI workflows"   "v8.30.1"
 _ci_has "tflint version v0.63.1 in CI workflows"     "v0.63.1"
-_ci_has "trufflehog version v3.95.5 in CI workflows" "v3.95.5"
+_ci_has "trufflehog version v3.95.6 in CI workflows" "v3.95.6"
 _ci_has "actionlint version v1.7.12 in CI workflows" "v1.7.12"
 
 # ── Terraform ─────────────────────────────────────────────────────────────────
