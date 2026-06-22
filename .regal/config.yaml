@@ -1,0 +1,7 @@
+rules:
+  idiomatic:
+    # Entrypoint annotations are for OPA bundles/decision APIs. These are conftest
+    # policy-as-code rules evaluated via `conftest test`/`verify`, so an entrypoint
+    # does not apply.
+    no-defined-entrypoint:
+      level: ignore
