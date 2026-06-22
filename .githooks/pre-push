@@ -84,7 +84,8 @@ gate_stack() {
 		rm -rf "$tmp"
 		return 1
 	}
-	conftest test --all-namespaces -p "$POLICY_DIR" "$tmp/plan.json"
+	# Evaluate + record a validation artifact (policy-reports/), then return its verdict.
+	"$REPO_ROOT/scripts/policy-report.sh" "$stack" "$tmp/plan.json"
 	local crc=$?
 	rm -rf "$tmp"
 	return "$crc"
