@@ -89,8 +89,7 @@ loonvault-plan:
     terraform validate
     terraform plan -var-file=terraform.tfvars -out=tfplan.bin
     terraform show -json tfplan.bin > tfplan.json
-    echo ">> OPA/conftest policy gate..."
-    conftest test --all-namespaces -p ../../policies tfplan.json
+    ../../scripts/policy-report.sh loonvault tfplan.json
     rm -f tfplan.bin tfplan.json
 
 # Apply loonvault stack — outside devcontainer (ephemeral: apply before interviews, destroy after)
@@ -105,8 +104,7 @@ loonvault-apply:
     terraform validate
     terraform plan -var-file=terraform.tfvars -out=tfplan.bin
     terraform show -json tfplan.bin > tfplan.json
-    echo ">> OPA/conftest policy gate..."
-    conftest test --all-namespaces -p ../../policies tfplan.json
+    ../../scripts/policy-report.sh loonvault tfplan.json
     rm -f tfplan.json
     read -r -p "Policy gate passed. Apply this plan? [y/N] " ans
     [ "$ans" = "y" ] || { echo "aborted."; rm -f tfplan.bin; exit 1; }

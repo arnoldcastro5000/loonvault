@@ -50,6 +50,9 @@ yarn-error.log*
 # Handoff documents — never public
 handoff.md
 
+# Policy gate validation artifacts (per-run evidence; may contain plan detail)
+policy-reports/
+
 # Lambda build artefacts
 lambdas/**/*.zip
 lambdas/**/package/

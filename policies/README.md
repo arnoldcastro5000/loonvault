@@ -63,6 +63,29 @@ curl -sSLo /tmp/conftest.tgz \
 sudo tar xzf /tmp/conftest.tgz -C /usr/local/bin conftest
 ```
 
+## Validation artifacts (audit evidence)
+
+Every real-plan evaluation (the pre-push hook and `just loonvault-plan`/`-apply`, via
+`scripts/policy-report.sh`) records a per-run artifact to **`policy-reports/`** — written on
+both pass and fail. This is the per-deploy *result* evidence (complementing `COMPLIANCE.md`,
+which is *coverage*). AWS's pattern-based policy-as-code guidance recommends retaining these so
+results travel with the change record for audit instead of vanishing into logs.
+
+`policy-reports/` is **git-ignored** (per-run records may contain plan detail). Each file is
+`policy-reports/<stack>-<utc>-<gitsha>.json`:
+```json
+{
+  "run":    { "timestamp": "...", "stack": "loonvault", "git_commit": "<sha>",
+              "policy_version": "<git tree sha of policies/>", "tool": "conftest 0.56.0" },
+  "scope":  "infra/loonvault plan (terraform show -json)",
+  "result": "pass | fail",
+  "conftest": { "...": "raw conftest -o json output" }
+}
+```
+`policy_version` pins the report to the exact policy set that produced it. CI does **not** produce
+these (no AWS credentials → no real plan); it runs the unit tests only. The future ADR-0010 apply
+runner writes the same artifact to its handoff/evidence location.
+
 ## Rules (v1)
 
 | Pattern | Rule | OSFI B-13 | GC |
