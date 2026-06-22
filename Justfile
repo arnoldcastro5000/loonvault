@@ -76,16 +76,42 @@ loonvault-build:
     curl -fsSL https://truststore.pki.rds.amazonaws.com/ca-central-1/ca-central-1-bundle.pem \
       -o lambdas/layers/rds-ca/rds-ca-bundle.pem
 
-# Plan loonvault stack — outside devcontainer
+# Run the OPA policy unit tests (offline, no AWS creds). Needs conftest.
+policy-test:
+    conftest verify -p policies
+
+# Plan loonvault stack + OPA/conftest policy gate on the plan — outside devcontainer
 loonvault-plan:
+    #!/usr/bin/env bash
+    set -euo pipefail
     terraform fmt -recursive -check infra/
-    cd infra/loonvault && terraform validate && terraform plan -var-file=terraform.tfvars
+    cd infra/loonvault
+    terraform validate
+    terraform plan -var-file=terraform.tfvars -out=tfplan.bin
+    terraform show -json tfplan.bin > tfplan.json
+    echo ">> OPA/conftest policy gate..."
+    conftest test --all-namespaces -p ../../policies tfplan.json
+    rm -f tfplan.bin tfplan.json
 
 # Apply loonvault stack — outside devcontainer (ephemeral: apply before interviews, destroy after)
+# Gated: plans, runs the conftest policy gate, then prompts before applying the reviewed plan.
 # Post-apply steps (origin secret + db-init) are required — see docs/runbook.md
 loonvault-apply:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v conftest >/dev/null || { echo "conftest not found — see policies/README.md"; exit 1; }
     terraform fmt -recursive -check infra/
-    cd infra/loonvault && terraform validate && terraform apply -var-file=terraform.tfvars
+    cd infra/loonvault
+    terraform validate
+    terraform plan -var-file=terraform.tfvars -out=tfplan.bin
+    terraform show -json tfplan.bin > tfplan.json
+    echo ">> OPA/conftest policy gate..."
+    conftest test --all-namespaces -p ../../policies tfplan.json
+    rm -f tfplan.json
+    read -r -p "Policy gate passed. Apply this plan? [y/N] " ans
+    [ "$ans" = "y" ] || { echo "aborted."; rm -f tfplan.bin; exit 1; }
+    terraform apply tfplan.bin
+    rm -f tfplan.bin
 
 # Destroy loonvault stack — keeps bootstrap + frontend resources (outside devcontainer)
 loonvault-destroy:
