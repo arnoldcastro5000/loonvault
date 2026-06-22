@@ -1,0 +1,56 @@
+{
+  "format_version": "1.2",
+  "configuration": {
+    "provider_config": {
+      "aws": {
+        "name": "aws",
+        "expressions": { "region": { "constant_value": "us-east-1" } }
+      }
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_security_group_rule.ssh_world",
+      "type": "aws_security_group_rule",
+      "change": {
+        "actions": ["create"],
+        "after": {
+          "type": "ingress",
+          "from_port": 22,
+          "to_port": 22,
+          "protocol": "tcp",
+          "cidr_blocks": ["0.0.0.0/0"],
+          "ipv6_cidr_blocks": []
+        }
+      }
+    },
+    {
+      "address": "aws_security_group_rule.rds_open_cidr",
+      "type": "aws_security_group_rule",
+      "change": {
+        "actions": ["create"],
+        "after": {
+          "type": "ingress",
+          "from_port": 5432,
+          "to_port": 5432,
+          "protocol": "tcp",
+          "cidr_blocks": ["10.0.0.0/16"],
+          "ipv6_cidr_blocks": []
+        }
+      }
+    },
+    {
+      "address": "aws_s3_bucket_public_access_block.leaky",
+      "type": "aws_s3_bucket_public_access_block",
+      "change": {
+        "actions": ["create"],
+        "after": {
+          "block_public_acls": false,
+          "ignore_public_acls": true,
+          "block_public_policy": true,
+          "restrict_public_buckets": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "format_version": "1.2",
+  "configuration": {
+    "provider_config": {
+      "aws": {
+        "name": "aws",
+        "expressions": { "region": { "constant_value": "ca-central-1" } }
+      }
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_security_group_rule.rds_from_lambda",
+      "type": "aws_security_group_rule",
+      "change": {
+        "actions": ["create"],
+        "after": {
+          "type": "ingress",
+          "from_port": 5432,
+          "to_port": 5432,
+          "protocol": "tcp",
+          "cidr_blocks": [],
+          "ipv6_cidr_blocks": [],
+          "source_security_group_id": "sg-lambda"
+        }
+      }
+    },
+    {
+      "address": "aws_s3_bucket_public_access_block.raw",
+      "type": "aws_s3_bucket_public_access_block",
+      "change": {
+        "actions": ["create"],
+        "after": {
+          "block_public_acls": true,
+          "ignore_public_acls": true,
+          "block_public_policy": true,
+          "restrict_public_buckets": true
+        }
+      }
+    }
+  ]
+}
