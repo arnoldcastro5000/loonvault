@@ -115,3 +115,15 @@ resource "aws_lambda_function_url" "site" {
   function_name      = aws_lambda_function.site.function_name
   authorization_type = "NONE"
 }
+
+# An AuthType=NONE Function URL still needs a resource-based permission allowing
+# anonymous lambda:InvokeFunctionUrl — the console adds this implicitly, Terraform does
+# not. Without it the URL returns AWS's IAM "Forbidden". Public invoke is intentional;
+# the real gate is the X-Origin-Secret check in the handler (ADR-0013).
+resource "aws_lambda_permission" "site_url" {
+  statement_id           = "AllowPublicFunctionUrlInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.site.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
