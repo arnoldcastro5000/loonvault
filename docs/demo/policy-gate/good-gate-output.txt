@@ -1,0 +1,1 @@
+policy gate PASS (demo-good) — artifact: policy-reports/demo-good-20260622T222712Z-8afd80c.json

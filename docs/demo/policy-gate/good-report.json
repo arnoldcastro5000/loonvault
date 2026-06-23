@@ -1,0 +1,48 @@
+{
+  "run": {
+    "timestamp": "2026-06-22T22:27:12Z",
+    "stack": "demo-good",
+    "git_commit": "8afd80c",
+    "policy_version": "d19fd1a4378b4eed14b43ddcbb107190b1c87e9f",
+    "tool": "conftest 0.56.0"
+  },
+  "scope": "infra/demo-good plan (terraform show -json)",
+  "result": "pass",
+  "conftest": [
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/good/plan.json",
+      "namespace": "patterns.baseline",
+      "successes": 1
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/good/plan.json",
+      "namespace": "patterns.baseline_test",
+      "successes": 0
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/good/plan.json",
+      "namespace": "patterns.networking",
+      "successes": 5
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/good/plan.json",
+      "namespace": "patterns.networking_test",
+      "successes": 0
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/good/plan.json",
+      "namespace": "patterns.storage",
+      "successes": 4
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/good/plan.json",
+      "namespace": "patterns.storage_test",
+      "successes": 0
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/good/plan.json",
+      "namespace": "shared",
+      "successes": 0
+    }
+  ]
+}

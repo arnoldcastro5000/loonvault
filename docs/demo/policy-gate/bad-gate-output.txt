@@ -1,0 +1,4 @@
+policy gate FAIL (demo-bad) — artifact: policy-reports/demo-bad-20260622T222703Z-8afd80c.json
+  - DENY [OSFI B-13: Cyber Security – Infrastructure security | GC -] aws_security_group_rule.ssh_world — administrative port (22/3389) open to the internet
+  - DENY [OSFI B-13: Cyber Security – Data security (at rest) | GC GR06] aws_s3_bucket.leak — bucket has no public-access-block
+  - DENY [OSFI B-13: Cyber Security – Data security (at rest) | GC GR06] aws_s3_bucket_policy.leak — bucket policy grants public access with no condition
