@@ -53,6 +53,9 @@ handoff.md
 # Policy gate validation artifacts (per-run evidence; may contain plan detail)
 policy-reports/
 
+# Built static site (generated from frontend/ by scripts/build-frontend.py)
+frontend/dist/
+
 # Lambda build artefacts
 lambdas/**/*.zip
 lambdas/**/package/
