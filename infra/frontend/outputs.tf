@@ -9,11 +9,11 @@ output "snapshots_bucket_domain" {
 }
 
 output "site_bucket" {
-  description = "Static site bucket name — public read, deploy target for `just deploy-frontend`"
+  description = "Private static site bucket name — deploy target for `just deploy-frontend`"
   value       = aws_s3_bucket.site.id
 }
 
-output "site_website_endpoint" {
-  description = "S3 static website endpoint — put Cloudflare in front of this"
-  value       = aws_s3_bucket_website_configuration.site.website_endpoint
+output "site_function_url" {
+  description = "Origin-protected site Lambda Function URL — point Cloudflare at this (ADR-0013)"
+  value       = aws_lambda_function_url.site.function_url
 }
