@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoonVault — bank-grade secure data platform</title>
+  <meta name="description" content="A security-first cloud platform serving Bank of Canada indicators, mapped to OSFI B-13.">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="site">
+    <span class="brand">🔒 LoonVault</span>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="posture.html">Posture</a>
+      <a href="compliance.html">Compliance</a>
+      <a href="https://github.com/arnoldcastro5000/loonvault">GitHub ↗</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <span class="badge">Cloud-security portfolio · OSFI B-13</span>
+      <h1>Bank-grade security for a public data API</h1>
+      <p class="tagline">A public API serving Bank of Canada cost-of-living indicators, built and
+        secured the way a Canadian financial institution would — defense-in-depth, a STRIDE threat
+        model, and live attack-and-defense demonstrations.</p>
+      <div class="callout"><strong>The data is payload, not the point.</strong> The indicators exist
+        to justify real infrastructure worth securing. All the engineering effort is the security story.</div>
+    </section>
+
+    <section>
+      <h2>Security highlights</h2>
+      <div class="grid">
+        <div class="card"><h3>Identity</h3>Tiered access; admin plane behind Cloudflare Access
+          (Zero-Trust + MFA) with the CF Access JWT validated at the origin. Least-privilege IAM per Lambda.</div>
+        <div class="card"><h3>Secrets / DB auth</h3>RDS IAM authentication — application DB users have
+          no stored credential; SigV4 tokens, 15-minute TTL.</div>
+        <div class="card"><h3>Network</h3>Private subnets, security-group-to-security-group ingress only
+          (no CIDR), gateway VPC endpoints (no NAT), VPC Flow Logs.</div>
+        <div class="card"><h3>Data</h3>Customer-managed KMS on S3, RDS &amp; Secrets Manager; TLS 1.2 at
+          every hop; S3 Block Public Access on private buckets.</div>
+        <div class="card"><h3>Guardrail &amp; audit</h3>Region-lock SCP pins workloads to
+          <code>ca-central-1</code>; a tamper-evident organization-wide CloudTrail.</div>
+        <div class="card"><h3>Policy-as-code</h3>An OPA gate blocks insecure Terraform before deploy;
+          the OSFI/GC compliance matrix is generated from the policy metadata. See
+          <a href="compliance.html">Compliance</a>.</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Architecture</h2>
+      <ul class="flow">
+        <li><b>Edge</b> — Cloudflare: DNS · WAF · rate-limit · TLS Full-strict · Access (MFA) for <code>/admin</code></li>
+        <li><b>Public read</b> → API Gateway (HTTP API) → Lambda authorizer (origin secret + CF Access JWT) → Read Lambda (in VPC)</li>
+        <li><b>Data</b> → RDS Postgres in private subnets (IAM auth · CMK · TLS verify-full)</li>
+        <li><b>Ingest</b> → EventBridge (daily) → Ingest Lambda → S3 raw zone (CMK) → Transform Lambda → RDS + public S3 snapshots</li>
+        <li><b>This site</b> — always-on static frontend; falls back to public snapshots when the API is down</li>
+      </ul>
+      <p>Ephemeral backend (<code>terraform apply</code> for demos, <code>destroy</code> after);
+        always-on frontend. Everything in <code>ca-central-1</code>, all Terraform.</p>
+    </section>
+
+    <section id="indicators">
+      <h2>Live indicators</h2>
+      <p id="data-status" class="status">Loading…</p>
+      <table id="data-table"></table>
+    </section>
+  </main>
+
+  <footer class="site">
+    LoonVault — cloud-security portfolio project ·
+    <a href="https://github.com/arnoldcastro5000/loonvault">source on GitHub</a>
+  </footer>
+
+  <script src="assets/config.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

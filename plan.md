@@ -27,7 +27,7 @@ attack-&-defense demonstrations.
 | Detection | Free-native + OSS (CloudTrail, Flow Logs, EventBridge→CloudWatch→SNS, Prowler) + short paid bursts |
 | CI/CD | GitHub Actions + public repo; **CI = static scans only** (`terraform fmt`, `terraform validate`, Checkov, betterleaks, TruffleHog (verified credentials + AWS account IDs), Semgrep (SAST), pip-audit (Python SCA), `npm audit` (frontend SCA), `just --fmt --check` (Justfile syntax), Socket.dev (supply chain), zizmor (Actions workflow security), Dependency Review (PR-time), Ruff (Python linter), ESLint/`next lint` (TypeScript linter), tflint + AWS ruleset (Terraform linter), regal (Rego linter), actionlint (Actions correctness) — no AWS credentials, every push/PR). **Dependabot**: daily PRs for `pip`, `npm`, `github-actions` dependencies. **Local hooks**: gitleaks pre-commit; OPA/Conftest pre-push. **`just loonvault-apply` = terminal-only** (wraps `terraform apply`); `just deploy-frontend` for frontend. No GitHub OIDC role — GitHub Actions never holds AWS credentials; all Terraform changes originate from the developer's terminal. |
 | Data | BoC Valet — rates, FX, CPI/core inflation, BCPI (single source) |
-| Keys / account / frontend | **Single shared customer-managed KMS CMK** for S3 raw zone, RDS, and Secrets Manager (see ADR-0005 — separate per-service CMKs are the production standard but consolidated here for budget); S3 snapshots bucket uses SSE-S3 (AES-256) not CMK — public reads via Cloudflare cannot decrypt SSE-KMS objects; single account (multi-account documented as tradeoff); **Next.js/TypeScript static site on S3** (REST endpoint, `ca-central-1`), Cloudflare CDN/WAF/DDoS in front |
+| Keys / account / frontend | **Single shared customer-managed KMS CMK** for S3 raw zone, RDS, and Secrets Manager (see ADR-0005 — separate per-service CMKs are the production standard but consolidated here for budget); S3 snapshots bucket uses SSE-S3 (AES-256) not CMK — public reads via Cloudflare cannot decrypt SSE-KMS objects; single account (multi-account documented as tradeoff); **lean static site (hand-written HTML/CSS/JS, no framework) on S3** (website endpoint, `ca-central-1`), Cloudflare CDN/WAF/DDoS in front — chose lean static over Next.js for finish-fast + native-over-frameworks (no build step, no JS/TS dependency surface) |
 | Domains | API: `api-loonvault.cloudsecuritypractice.com` → Cloudflare → API Gateway. Frontend: `loonvault.cloudsecuritypractice.com` → Cloudflare → S3 REST endpoint. Cloudflare Access team domain: `loonvault.cloudflareaccess.com` |
 | Secrets / DB auth | **RDS IAM authentication** for app DB users (no stored credential — ADR-0006); Secrets Manager (CMK) holds only the RDS-managed master password; SSM Parameter Store (SecureString) for the origin secret + other config |
 | Task runner | **Justfile** — `just loonvault-apply`, `just loonvault-destroy`, `just deploy-frontend`, `just scan` wrap all terminal-only operations; raw commands documented in README as fallback |
@@ -51,7 +51,7 @@ attack-&-defense demonstrations.
   endpoints, no NAT.**
 - **Admin:** Cloudflare Access (Zero-Trust + MFA) → API Gateway (Lambda authorizer validates
   **both** shared-secret header and CF Access JWT) → admin Lambda.
-- **Frontend:** Next.js/TypeScript static site built and synced to **S3 (REST endpoint, `ca-central-1`)**, Cloudflare CDN/WAF/DDoS in front. Five nav sections: **Home** (project summary), **Data Analysis** (live dashboard, calls the public API), **Posture** (Threat Model + Security Controls sub-pages), **Compliance** (OSFI + GC Cloud Guardrails sub-pages), **GitHub ↗** (external link). Posture/Compliance/Home are static, always-on independently of backend.
+- **Frontend:** lean hand-written static site (HTML/CSS/JS, no framework, no build step) synced to **S3 (website endpoint, `ca-central-1`)**, Cloudflare CDN/WAF/DDoS in front. Sections: **Home** (project summary, architecture, + a live indicators panel that calls the public API and falls back to S3 snapshots), **Posture** (threat model + controls), **Compliance** (OSFI + GC Cloud Guardrails + the OPA compliance matrix and blocked-attack evidence), **GitHub ↗**. Home/Posture/Compliance are static, always-on independently of the backend.
 
 ### Origin protection
 Cloudflare injects `X-Origin-Secret: <token>` on every proxied request. Token stored in SSM
@@ -378,7 +378,7 @@ answer its questions out loud, unaided.
 - CloudWatch Logs retention: **2 years** (Protected B requirement; ~$1–2/mo at LoonVault volume).
 - **Last-resort cost control:** if monthly spend exceeds budget, `just loonvault-destroy` the entire
   backend stack. Re-apply (`just loonvault-apply`) only before interviews. Frontend S3 bucket and
-  Next.js static files remain always-on at negligible cost. The shared CMK persists (keys are not destroyed — ~$1/mo at rest).
+  the static site files remain always-on at negligible cost. The shared CMK persists (keys are not destroyed — ~$1/mo at rest).
   IaC makes full restore a single command.
 
 ---
@@ -429,7 +429,7 @@ audit trail (CloudTrail + alarms). Documented in cloud exit strategy.
 | AWS Secrets Manager | LOW — holds only the RDS-managed master password; app DB auth uses RDS IAM (ADR-0006), so the data path has no Secrets Manager dependency | `aws secretsmanager get-secret-value --secret-id <name>` → destination system |
 | RDS IAM authentication | MEDIUM — app DB connections fail if the IAM/STS control plane is unavailable; token validation routes through us-east-1 (mitigated by regional STS endpoint) | Re-enable password auth + Secrets Manager as documented fallback |
 | AWS SQS | MEDIUM — Transform Lambda not triggered if unavailable; messages retained in queue and processed on recovery | Export messages via `aws sqs receive-message`; replay against replacement system |
-| AWS S3 (static frontend bucket) | LOW — Cloudflare serves cached responses during an S3 outage; frontend degrades gracefully | `aws s3 sync s3://loonvault-frontend/ ./out/` → serve static files from any CDN or static host |
+| AWS S3 (static frontend bucket) | LOW — Cloudflare serves cached responses during an S3 outage; frontend degrades gracefully | `aws s3 sync s3://<frontend-site-bucket>/ ./frontend/` → serve the static files from any CDN or static host |
 
 ---
 
