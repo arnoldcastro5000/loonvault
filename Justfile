@@ -176,9 +176,11 @@ verify-docs:
 compliance-report:
     bash scripts/gen-compliance-matrix.sh
 
-# Deploy frontend static site to S3 (outside devcontainer)
+# Deploy the lean static frontend to its S3 site bucket (outside devcontainer).
+# No build step — the site is hand-written HTML/CSS/JS in ./frontend. Requires the
+# frontend stack applied (provides the site_bucket output). Cloudflare fronts the bucket.
 deploy-frontend:
-    cd frontend && npm run build && aws s3 sync out/ s3://loonvault-frontend/
+    aws s3 sync frontend/ "s3://$(terraform -chdir=infra/frontend output -raw site_bucket)/" --delete
 
 # Mint a ~1h GitHub App installation token for the loonvault-agent App (prints to stdout).
 # The App private key must be at $GH_APP_KEY_FILE (default ~/.config/loonvault/agent.pem).
