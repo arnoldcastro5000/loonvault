@@ -67,6 +67,18 @@ resource "aws_iam_role_policy" "site" {
   })
 }
 
+resource "aws_cloudwatch_log_group" "site" {
+  #checkov:skip=CKV_AWS_338:30-day retention for portfolio POC
+  #checkov:skip=CKV_AWS_158:No CMK — the always-on frontend must not depend on the ephemeral backend CMK (ADR-0007); site access logs hold no sensitive data
+  name              = "/aws/lambda/${local.name_prefix}-site"
+  retention_in_days = 30
+}
+
+resource "aws_iam_role_policy_attachment" "site_xray" {
+  role       = aws_iam_role.site.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 resource "aws_lambda_function" "site" {
   #checkov:skip=CKV_AWS_272:Code signing out of scope for portfolio POC
   #checkov:skip=CKV_AWS_117:Not in VPC — must reach S3 + SSM via internet; no VPC endpoints provisioned in the always-on stack
@@ -80,6 +92,10 @@ resource "aws_lambda_function" "site" {
   timeout       = 10
   memory_size   = 128
 
+  tracing_config {
+    mode = "Active"
+  }
+
   filename         = data.archive_file.site.output_path
   source_code_hash = data.archive_file.site.output_base64sha256
 
@@ -90,6 +106,8 @@ resource "aws_lambda_function" "site" {
       CSP                    = "default-src 'self'; img-src 'self' data:; connect-src 'self' ${var.api_origin} ${var.snapshot_origin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     }
   }
+
+  depends_on = [aws_cloudwatch_log_group.site]
 }
 
 resource "aws_lambda_function_url" "site" {

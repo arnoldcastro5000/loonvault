@@ -8,8 +8,13 @@ set of HTTP security headers. No third-party deps (boto3 ships in the runtime).
 import base64
 import hmac
 import os
+import re
 
 import boto3
+
+# Strict allowlist for resolved object keys — defeats path traversal / unexpected
+# input before it ever reaches S3 (only safe static-asset key characters).
+_SAFE_KEY = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._/-]*\Z")
 
 _s3 = None
 _ssm = None
@@ -95,9 +100,9 @@ def handler(event, _context):
         return _resp(403, "forbidden")
 
     path = event.get("rawPath", "/")
-    if ".." in path:
-        return _resp(400, "bad request")
     key = _key_for(path)
+    if ".." in key or not _SAFE_KEY.match(key):
+        return _resp(400, "bad request")
     ext = key.rsplit(".", 1)[-1].lower() if "." in key else ""
     content_type = _CONTENT_TYPES.get(ext, "application/octet-stream")
     # HTML isn't cached long (so content updates show); static assets cache hard.
