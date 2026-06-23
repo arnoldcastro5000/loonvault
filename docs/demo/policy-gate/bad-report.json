@@ -1,0 +1,61 @@
+{
+  "run": {
+    "timestamp": "2026-06-22T22:27:03Z",
+    "stack": "demo-bad",
+    "git_commit": "8afd80c",
+    "policy_version": "d19fd1a4378b4eed14b43ddcbb107190b1c87e9f",
+    "tool": "conftest 0.56.0"
+  },
+  "scope": "infra/demo-bad plan (terraform show -json)",
+  "result": "fail",
+  "conftest": [
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/bad/plan.json",
+      "namespace": "shared",
+      "successes": 0
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/bad/plan.json",
+      "namespace": "patterns.baseline",
+      "successes": 1
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/bad/plan.json",
+      "namespace": "patterns.baseline_test",
+      "successes": 0
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/bad/plan.json",
+      "namespace": "patterns.networking",
+      "successes": 4,
+      "failures": [
+        {
+          "msg": "DENY [OSFI B-13: Cyber Security – Infrastructure security | GC -] aws_security_group_rule.ssh_world — administrative port (22/3389) open to the internet"
+        }
+      ]
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/bad/plan.json",
+      "namespace": "patterns.networking_test",
+      "successes": 0
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/bad/plan.json",
+      "namespace": "patterns.storage",
+      "successes": 2,
+      "failures": [
+        {
+          "msg": "DENY [OSFI B-13: Cyber Security – Data security (at rest) | GC GR06] aws_s3_bucket.leak — bucket has no public-access-block"
+        },
+        {
+          "msg": "DENY [OSFI B-13: Cyber Security – Data security (at rest) | GC GR06] aws_s3_bucket_policy.leak — bucket policy grants public access with no condition"
+        }
+      ]
+    },
+    {
+      "filename": "/tmp/tmp.AjcOCV95iy/bad/plan.json",
+      "namespace": "patterns.storage_test",
+      "successes": 0
+    }
+  ]
+}
