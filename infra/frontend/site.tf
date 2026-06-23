@@ -15,7 +15,7 @@ resource "aws_s3_bucket" "site" {
   #checkov:skip=CKV_AWS_145:Static site uses SSE-S3 intentionally — public reads cannot decrypt SSE-KMS
   #checkov:skip=CKV_AWS_21:Static site assets are redeployed wholesale; versioning adds cost without benefit
   #checkov:skip=CKV2_AWS_6:Partial public access block is intentional — the site bucket serves public reads
-  bucket = "${local.name_prefix}-site-${local.account_id}"
+  bucket = "${local.name_prefix}-site"
 }
 
 resource "aws_s3_bucket_website_configuration" "site" {
