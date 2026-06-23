@@ -53,6 +53,16 @@ presents a valid AWS certificate), so transport is HTTPS end-to-end. The Functio
 `AuthType NONE`; the **secret header is the gate** — a direct request to the Function URL without the
 header gets a 403, exactly like the API.
 
+**The Cloudflare side is a Worker** (`cloudflare/worker.js`), not a plain Transform Rule. A reverse-proxy
+Worker bound to `loonvault.cloudsecuritypractice.com/*` does the edge work in code: it **allowlists the
+exact paths/methods** (the site's `/`, `/index.html`, `/docs.html`, `/assets/*`, `/content/*`), enforces
+request hygiene (method, body, traversal/encoding, header-size, canonical-host checks), **injects
+`X-Origin-Secret`**, rewrites the request to `ORIGIN_HOST` (the Function URL host), and **drops the
+inbound `Host` header** so the Function URL receives its own. The secret is a Cloudflare **encrypted
+Worker secret** (`ORIGIN_SECRET`), not a plaintext variable. The Worker is committed for version control
+but **deployed manually** (copy-paste into the Worker editor — no `wrangler`/CI for the edge). This is a
+strict superset of the Transform-Rule approach: same header injection, plus edge-level allowlisting.
+
 **Security headers.** Because the Lambda builds the full response, it serves a strict, app-owned
 security-header set on every object: a tight **Content-Security-Policy** (the frontend is first-party,
 zero-dependency, same-origin, so `default-src 'self'; script-src 'self'`; no `unsafe-inline`/`-eval`;
