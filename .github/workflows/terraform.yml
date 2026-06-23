@@ -33,6 +33,11 @@ jobs:
           cd ../loonvault && terraform init -backend=false && terraform validate
 
       - name: tflint
+        # Authenticate `tflint --init`'s plugin download so it uses GitHub's 5,000 req/hr
+        # authenticated limit instead of the 60 req/hr per-IP anon limit (shared runner IPs
+        # routinely trip it → 403). contents:read is sufficient; no extra permission needed.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           curl -sSLo tflint.zip \
             "https://github.com/terraform-linters/tflint/releases/download/v0.63.1/tflint_linux_amd64.zip"
