@@ -12,8 +12,7 @@
     <span class="brand">🔒 LoonVault</span>
     <nav>
       <a href="index.html">Home</a>
-      <a href="posture.html">Posture</a>
-      <a href="compliance.html">Compliance</a>
+      <a href="docs.html">Docs</a>
       <a href="https://github.com/arnoldcastro5000/loonvault">GitHub ↗</a>
     </nav>
   </header>
@@ -44,7 +43,7 @@
           <code>ca-central-1</code>; a tamper-evident organization-wide CloudTrail.</div>
         <div class="card"><h3>Policy-as-code</h3>An OPA gate blocks insecure Terraform before deploy;
           the OSFI/GC compliance matrix is generated from the policy metadata. See
-          <a href="compliance.html">Compliance</a>.</div>
+          <a href="docs.html#COMPLIANCE">the compliance matrix</a>.</div>
       </div>
     </section>
 
@@ -59,6 +58,15 @@
       </ul>
       <p>Ephemeral backend (<code>terraform apply</code> for demos, <code>destroy</code> after);
         always-on frontend. Everything in <code>ca-central-1</code>, all Terraform.</p>
+    </section>
+
+    <section>
+      <h2>Documentation</h2>
+      <p>The full design is documented in the repo and rendered live here: the
+        <a href="docs.html#threat-model">STRIDE threat model</a>,
+        the <a href="docs.html#COMPLIANCE">compliance matrix</a>,
+        the <a href="docs.html">architecture decision records</a>, and the operations runbook —
+        all rendered from the canonical Markdown, same-origin.</p>
     </section>
 
     <section id="indicators">

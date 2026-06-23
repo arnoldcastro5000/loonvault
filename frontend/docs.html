@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{TITLE}} — LoonVault</title>
+  <title>Docs — LoonVault</title>
+  <meta name="description" content="LoonVault documentation — threat model, ADRs, compliance, runbooks — rendered live from the repo Markdown.">
   <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
@@ -11,17 +12,27 @@
     <span class="brand">🔒 LoonVault</span>
     <nav>
       <a href="index.html">Home</a>
-      <a href="posture.html">Posture</a>
-      <a href="compliance.html">Compliance</a>
+      <a href="docs.html">Docs</a>
       <a href="https://github.com/arnoldcastro5000/loonvault">GitHub ↗</a>
     </nav>
   </header>
-  <main class="prose">
-{{CONTENT}}
-  </main>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav id="doc-nav" aria-label="Documents"></nav>
+    </aside>
+    <main class="docs-main">
+      <h1 id="doc-title">Documentation</h1>
+      <article id="doc-content" class="prose">Loading…</article>
+    </main>
+  </div>
+
   <footer class="site">
     LoonVault — cloud-security portfolio project ·
     <a href="https://github.com/arnoldcastro5000/loonvault">source on GitHub</a>
   </footer>
+
+  <script src="assets/md-renderer.js"></script>
+  <script src="assets/viewer.js"></script>
 </body>
 </html>
