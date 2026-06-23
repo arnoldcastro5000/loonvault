@@ -38,7 +38,7 @@ locals {
   # Snapshots bucket lives in the always-on ../frontend stack. Its name is
   # deterministic, so the Transform Lambda references it without a remote-state
   # lookup (writes are identity-based, same account).
-  snapshots_bucket = "${local.name_prefix}-snapshots-${local.account_id}"
+  snapshots_bucket = "${local.name_prefix}-snapshots"
 
   # ca-central-1 has AZs a, b, d — use first two for Lambda subnets
   az_a = data.aws_availability_zones.available.names[0]
