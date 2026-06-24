@@ -115,3 +115,14 @@ resource "aws_lambda_function_url" "site" {
   function_name      = aws_lambda_function.site.function_name
   authorization_type = "NONE"
 }
+
+# Public access for a NONE Function URL requires TWO resource-based statements:
+#   1. lambda:InvokeFunctionUrl — auto-created by aws_lambda_function_url above
+#      (statement "FunctionURLAllowPublicAccess"), so it is NOT declared here.
+#   2. lambda:InvokeFunction (invoked-via-function-url) — REQUIRED for function URLs since
+#      October 2025 (AWS docs: lambda/latest/dg/urls-auth). Without it the URL returns AWS's
+#      403 "Forbidden" *before* the handler runs, even with AuthType=NONE. The pinned aws
+#      provider (5.100) predates the `invoked_via_function_url` argument, so this statement
+#      is created OUT OF BAND via the runbook — the same pattern as the SSM origin secret.
+#      See docs/runbook.md and ADR-0013. (Public invoke is safe: the gate is the in-handler
+#      X-Origin-Secret check, and a direct invoke with no header returns 403.)
