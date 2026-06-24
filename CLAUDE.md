@@ -2,7 +2,7 @@
 
 `scripts/verify-docs.sh` runs in CI (`docs-drift` job) and locally via `just verify-docs`. It asserts that documented claims match the actual repo state. Fail = documentation has drifted from reality.
 
-**Hardcoded counts — update these when you change the thing they guard:**
+**Hardcoded counts: update these when you change the thing they guard:**
 
 | What changed | File to update | Variable/label |
 |---|---|---|
@@ -15,14 +15,14 @@
 
 **Other checks (no hardcoded count, but still fail if broken):**
 
-- CI is split into per-component workflows under `.github/workflows/` (`terraform`, `sast`, `secrets`, `lint`, `supply-chain`, `dependency-review`, `docs-drift`) — one job each. `sast` scans the working tree (shallow checkout); `secrets` scans full git history (`fetch-depth: 0`)
-- All `uses:` actions in `.github/workflows/` must be SHA-pinned — no bare `@v1.2.3`
+- CI is split into per-component workflows under `.github/workflows/` (`terraform`, `sast`, `secrets`, `lint`, `supply-chain`, `dependency-review`, `docs-drift`): one job each. `sast` scans the working tree (shallow checkout); `secrets` scans full git history (`fetch-depth: 0`)
+- All `uses:` actions in `.github/workflows/` must be SHA-pinned: no bare `@v1.2.3`
 - Specific tool versions must appear in the CI workflows (gitleaks, tflint, trufflehog, actionlint)
 - `policies/COMPLIANCE.md` is **generated** from policy `# METADATA` by `scripts/gen-compliance-matrix.sh` (compliance-as-code). The `lint` CI job runs `--check` (needs `opa`) to fail if it drifts; regenerate with `just compliance-report`
 - Required files must exist: `docs/threat-model.md`, `CONTEXT.md`, `plan.md`, `docs/devcontainer.md`, `docs/runbook.md`, `docs/adr/0001-*`, `docs/adr/0002-*`
 - `.devcontainer/validate.sh` must still reference `docs/devcontainer.md` (keeps the spec and its validator linked)
 - `CONTEXT.md` must mention all three Pressure Metrics by name
-- `infra/main/` must not exist (phase gate — update when that changes)
+- `infra/main/` must not exist (phase gate: update when that changes)
 
 ## Agent skills
 
@@ -36,4 +36,4 @@ Default canonical label vocabulary (`needs-triage`, `needs-info`, `ready-for-age
 
 ### Domain docs
 
-Single-context repo — one `CONTEXT.md` + `docs/adr/` at the root. See `docs/agents/domain.md`.
+Single-context repo: one `CONTEXT.md` + `docs/adr/` at the root. See `docs/agents/domain.md`.

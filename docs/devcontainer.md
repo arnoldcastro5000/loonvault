@@ -4,7 +4,7 @@ The LoonVault devcontainer is the isolated environment in which Claude Code runs
 purpose is containment: the AI assistant has filesystem access scoped to the repository,
 a process sandbox, and an egress firewall, so that a prompt-injection attack has a limited
 blast radius (see T-051 in the threat model). **AWS credentials never enter this
-environment** — all Terraform and deploy operations run on the developer's host terminal.
+environment**: all Terraform and deploy operations run on the developer's host terminal.
 
 This document is the spec that `.devcontainer/validate.sh` checks the running container
 against. If you change `.devcontainer/`, update this file and re-run the validator inside
@@ -29,10 +29,10 @@ bash .devcontainer/validate.sh
 - Claude Code installed via `https://claude.ai/install.sh` to `~/.local/bin/claude`;
   `/home/node/.local/bin` is on `PATH`.
 - `gitleaks` installed to `/usr/local/bin`, pinned to **v8.30.1** (matches the CI `secrets`
-  workflow and the committed `.githooks/pre-commit` hook — see "Git hooks").
+  workflow and the committed `.githooks/pre-commit` hook: see "Git hooks").
 - `terraform` (pinned **1.9.8**, matching CI's `~1.9` and the stacks' `>= 1.9`) installed from
   `releases.hashicorp.com` to `/usr/local/bin`. For **offline static checks only** (`fmt`,
-  `validate`) — see "Intentionally absent" for why apply/plan/init still run on the host.
+  `validate`): see "Intentionally absent" for why apply/plan/init still run on the host.
 
 ## Installed packages
 
@@ -49,12 +49,12 @@ dnsutils aggregate jq nano vim bubblewrap socat`.
 
 ### Intentionally absent
 
-- **Terraform `apply`/`plan`/`init`/`destroy`** — not runnable here. The `terraform` binary
+- **Terraform `apply`/`plan`/`init`/`destroy`**: not runnable here. The `terraform` binary
   *is* installed (see above), but only for offline static checks (`fmt`, `validate`). AWS
   credentials never enter the devcontainer, so any credentialed/network operation
   (`apply`, `plan`, `init`, `destroy`) runs on the developer's host using short-lived IAM
   Identity Center sessions. (See the comment block in the Dockerfile.)
-- **`aws` CLI** and **`gcloud`** — not on `PATH`. `validate.sh` asserts both are absent;
+- **`aws` CLI** and **`gcloud`**: not on `PATH`. `validate.sh` asserts both are absent;
   no cloud credential tooling exists in the container.
 
 ## Git hooks
@@ -129,22 +129,22 @@ Declared in `devcontainer.json`:
 | `/workspace/.devcontainer/firewall-extra-domains.txt` | bind mount, **read-only** | extra egress allowlist entries, edited on the host |
 | `/home/node/.config/loonvault/agent.pem` | bind mount, **read-only** | GitHub App (`loonvault-agent`) private key, so the agent can mint short-lived installation tokens (`just gh-token`) to push branches + open PRs |
 
-### GitHub App key — a bounded, deliberate exception
+### GitHub App key: a bounded, deliberate exception
 
 AWS credentials never enter the container (above), but the GitHub App private key is mounted read-only so the agent can push branches and open PRs on its own. This is a deliberate, bounded exception, not a contradiction of the credential-free stance:
 
-- The App's permissions are **Contents/Pull-requests write only — no merge, no Administration**. The `protect-main` ruleset requires a human approval the App cannot self-provide, so the worst a prompt-injection-compromised agent can do is **open a PR a human still has to review and merge** (the T-051 mitigation: all AI changes pass CI + human review before reaching `main`).
+- The App's permissions are **Contents/Pull-requests write only: no merge, no Administration**. The `protect-main` ruleset requires a human approval the App cannot self-provide, so the worst a prompt-injection-compromised agent can do is **open a PR a human still has to review and merge** (the T-051 mitigation: all AI changes pass CI + human review before reaching `main`).
 - The key is read-only and only usable for this one bounded App; egress is firewall-limited to GitHub, so exfiltration buys an attacker only the same "open a PR" capability the agent already has.
 - The host must place the key at `~/.config/loonvault/agent.pem` **before** the container starts (a bind mount whose source is missing will fail or create a directory).
 
 ## Container capabilities and startup
 
-- **`runArgs`:** `--cap-add=NET_ADMIN --cap-add=NET_RAW` — required for the firewall to
+- **`runArgs`:** `--cap-add=NET_ADMIN --cap-add=NET_RAW`: required for the firewall to
   manipulate iptables/ipset.
 - **`postStartCommand`:** `sudo /usr/local/bin/init-firewall.sh` runs on every container
   start (the `node` user has passwordless sudo for this one script only, via
   `/etc/sudoers.d/node-firewall`).
-- **`waitFor`:** `postStartCommand` — the container is not considered ready until the
+- **`waitFor`:** `postStartCommand`: the container is not considered ready until the
   firewall is applied.
 
 ## Egress firewall
@@ -173,7 +173,7 @@ To allow an additional domain (e.g., for an MCP server), add it to
 
 ## Validation
 
-`.devcontainer/validate.sh` checks the running container against this spec — user,
+`.devcontainer/validate.sh` checks the running container against this spec: user,
 binaries, packages, env vars (present and absent), managed settings, project settings,
 mounts, absence of cloud credential tooling, and live firewall behavior. It exits `0` when
 all checks pass. Run it after any change to `.devcontainer/`.
