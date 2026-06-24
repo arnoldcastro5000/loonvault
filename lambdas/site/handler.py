@@ -9,12 +9,22 @@ import base64
 import hmac
 import os
 import re
+import secrets
 
 import boto3
 
 # Strict allowlist for resolved object keys — defeats path traversal / unexpected
 # input before it ever reaches S3 (only safe static-asset key characters).
 _SAFE_KEY = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._/-]*\Z")
+
+# CSP fallback (Terraform normally supplies the CSP env). The "__NONCE__" slot is replaced
+# per request on HTML responses with a fresh nonce; Cloudflare parses the nonce from this
+# response header and stamps its injected JS-detection/bot script with it, so that edge
+# feature runs without 'unsafe-inline' (ADR-0013, per Cloudflare's CSP guidance).
+_DEFAULT_CSP = (
+    "default-src 'self'; script-src 'self' 'nonce-__NONCE__'; "
+    "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+)
 
 _s3 = None
 _ssm = None
@@ -56,13 +66,11 @@ def _origin_secret():
     return _secret
 
 
-def _security_headers(content_type, cache_control):
+def _security_headers(content_type, cache_control, csp):
     return {
         "content-type": content_type,
         "cache-control": cache_control,
-        "content-security-policy": os.environ.get(
-            "CSP", "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
-        ),
+        "content-security-policy": csp,
         "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
@@ -105,16 +113,24 @@ def handler(event, _context):
         return _resp(400, "bad request")
     ext = key.rsplit(".", 1)[-1].lower() if "." in key else ""
     content_type = _CONTENT_TYPES.get(ext, "application/octet-stream")
-    # HTML isn't cached long (so content updates show); static assets cache hard.
-    cache_control = "public, max-age=60" if ext == "html" else "public, max-age=86400"
 
     try:
         obj = _s3_client().get_object(Bucket=os.environ["SITE_BUCKET"], Key=key)
     except Exception:
         return _resp(404, "not found")
 
+    # HTML carries a fresh per-request CSP nonce and must NOT be cached (a cached nonce
+    # would be reused); assets cache hard and bear no scripts, so the nonce slot is dropped.
+    csp = os.environ.get("CSP", _DEFAULT_CSP)
+    if ext == "html":
+        csp = csp.replace("__NONCE__", secrets.token_urlsafe(16))
+        cache_control = "no-store"
+    else:
+        csp = csp.replace(" 'nonce-__NONCE__'", "")
+        cache_control = "public, max-age=86400"
+
     data = obj["Body"].read()
-    sec = _security_headers(content_type, cache_control)
+    sec = _security_headers(content_type, cache_control, csp)
     if ext in _TEXT:
         return _resp(200, data.decode("utf-8"), sec, b64=False)
     return _resp(200, base64.b64encode(data).decode("ascii"), sec, b64=True)

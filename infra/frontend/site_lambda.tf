@@ -103,7 +103,9 @@ resource "aws_lambda_function" "site" {
     variables = {
       SITE_BUCKET            = aws_s3_bucket.site.id
       ORIGIN_SECRET_SSM_PATH = var.origin_secret_ssm_path
-      CSP                    = "default-src 'self'; img-src 'self' data:; connect-src 'self' ${var.api_origin} ${var.snapshot_origin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+      # script-src carries a per-request nonce (handler substitutes __NONCE__); Cloudflare
+      # parses it from the response header to allow its injected JS-detection/bot script.
+      CSP = "default-src 'self'; script-src 'self' 'nonce-__NONCE__'; img-src 'self' data:; connect-src 'self' ${var.api_origin} ${var.snapshot_origin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     }
   }
 

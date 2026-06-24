@@ -72,6 +72,14 @@ few Function-URL-managed headers (`Content-Length`, `Date`, `Connection`, `Trans
 be overridden, none of which are security headers. Cloudflare can additionally enforce these at the
 edge (defense in depth), but the origin is authoritative.
 
+The CSP `script-src` carries a **per-request nonce** the handler mints (HTML is served `no-store` so the
+nonce is never reused; cached assets drop the nonce slot). Cloudflare parses the nonce from this response
+header and stamps its injected **JavaScript-Detections / Bot-Fight Mode** script with it, so that edge
+feature can stay enabled **without** weakening the policy with `unsafe-inline` — per Cloudflare's CSP
+guidance, which requires the nonce in the *response header* (not a `<meta>` tag) and `script-src 'self'`
+(which already covers the same-origin `/cdn-cgi/challenge-platform/` script). This is why the site is
+served by a Lambda rather than a static header policy: a fresh nonce needs per-request compute.
+
 **Secret handling.** A **dedicated** site origin secret (separate from the API's, for independent blast
 radius and rotation) lives in **SSM Parameter Store (SecureString)** — consistent with the API origin
 secret. The Lambda reads it at cold start and caches it in memory; rotation means rotating the SSM
