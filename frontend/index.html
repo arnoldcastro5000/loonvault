@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LoonVault — bank-grade secure data platform</title>
+  <title>LoonVault: bank-grade secure data platform</title>
   <meta name="description" content="A security-first cloud platform serving Bank of Canada indicators, mapped to OSFI B-13.">
   <link rel="stylesheet" href="assets/styles.css">
 </head>
@@ -22,7 +22,7 @@
       <span class="badge">Cloud-security portfolio · OSFI B-13</span>
       <h1>Bank-grade security for a public data API</h1>
       <p class="tagline">A public API serving Bank of Canada cost-of-living indicators, built and
-        secured the way a Canadian financial institution would — defense-in-depth, a STRIDE threat
+        secured the way a Canadian financial institution would: defense-in-depth, a STRIDE threat
         model, and live attack-and-defense demonstrations.</p>
       <div class="callout"><strong>The data is payload, not the point.</strong> The indicators exist
         to justify real infrastructure worth securing. All the engineering effort is the security story.</div>
@@ -33,7 +33,7 @@
       <div class="grid">
         <div class="card"><h3>Identity</h3>Tiered access; admin plane behind Cloudflare Access
           (Zero-Trust + MFA) with the CF Access JWT validated at the origin. Least-privilege IAM per Lambda.</div>
-        <div class="card"><h3>Secrets / DB auth</h3>RDS IAM authentication — application DB users have
+        <div class="card"><h3>Secrets / DB auth</h3>RDS IAM authentication: application DB users have
           no stored credential; SigV4 tokens, 15-minute TTL.</div>
         <div class="card"><h3>Network</h3>Private subnets, security-group-to-security-group ingress only
           (no CIDR), gateway VPC endpoints (no NAT), VPC Flow Logs.</div>
@@ -50,11 +50,11 @@
     <section>
       <h2>Architecture</h2>
       <ul class="flow">
-        <li><b>Edge</b> — Cloudflare: DNS · WAF · rate-limit · TLS Full-strict · Access (MFA) for <code>/admin</code></li>
+        <li><b>Edge</b> (Cloudflare): DNS · WAF · rate-limit · TLS Full-strict · Access (MFA) for <code>/admin</code></li>
         <li><b>Public read</b> → API Gateway (HTTP API) → Lambda authorizer (origin secret + CF Access JWT) → Read Lambda (in VPC)</li>
         <li><b>Data</b> → RDS Postgres in private subnets (IAM auth · CMK · TLS verify-full)</li>
         <li><b>Ingest</b> → EventBridge (daily) → Ingest Lambda → S3 raw zone (CMK) → Transform Lambda → RDS + public S3 snapshots</li>
-        <li><b>This site</b> — always-on static frontend; falls back to public snapshots when the API is down</li>
+        <li><b>This site</b>: always-on static frontend; falls back to public snapshots when the API is down</li>
       </ul>
       <p>Ephemeral backend (<code>terraform apply</code> for demos, <code>destroy</code> after);
         always-on frontend. Everything in <code>ca-central-1</code>, all Terraform.</p>
@@ -65,7 +65,7 @@
       <p>The full design is documented in the repo and rendered live here: the
         <a href="docs.html#threat-model">STRIDE threat model</a>,
         the <a href="docs.html#COMPLIANCE">compliance matrix</a>,
-        the <a href="docs.html">architecture decision records</a>, and the operations runbook —
+        the <a href="docs.html">architecture decision records</a>, and the operations runbook,
         all rendered from the canonical Markdown, same-origin.</p>
     </section>
 
@@ -77,7 +77,7 @@
   </main>
 
   <footer class="site">
-    LoonVault — cloud-security portfolio project ·
+    LoonVault: cloud-security portfolio project ·
     <a href="https://github.com/arnoldcastro5000/loonvault">source on GitHub</a>
   </footer>
 

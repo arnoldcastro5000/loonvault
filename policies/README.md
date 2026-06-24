@@ -4,9 +4,9 @@ Compliance-annotated [Open Policy Agent](https://www.openpolicyagent.org/) polic
 Terraform changes **before deploy**, evaluated against `terraform show -json` plan output. This is
 the pre-deploy / preventive layer of LoonVault's layered governance (region-lock SCP = org
 guardrail; Prowler = post-deploy verification). Each rule is tagged with the OSFI B-13 principle and
-GC Cloud Guardrail it enforces — the policies double as **compliance evidence** (compliance-as-code).
+GC Cloud Guardrail it enforces: the policies double as **compliance evidence** (compliance-as-code).
 
-Structure follows AWS's pattern-based policy-as-code guidance — organised by control *intent*, not
+Structure follows AWS's pattern-based policy-as-code guidance: organised by control *intent*, not
 by service:
 
 ```
@@ -50,11 +50,11 @@ regal lint policies/
 
 Layered, matching LoonVault's credential-free-CI stance:
 
-- **CI (`lint` job)** — runs the **unit tests** (`conftest verify`) + `regal` + the compliance-matrix `--check`. No AWS creds, so it validates the *policies*, not a live plan. Pinned: `conftest 0.56.0`, `opa 1.17.0`, `regal 0.41.1`.
-- **Pre-push hook** (`.githooks/pre-push`) — on your terminal, where creds live: for a changed gated stack it runs `terraform plan` → `terraform show -json` → `conftest test`, blocking the push on a denial. Skips automatically in the devcontainer (`DEVCONTAINER=true`, no creds) and via `SKIP_POLICY_GATE=1` / `git push --no-verify`.
-- **`just` recipes** — `just policy-test` (unit tests); `just loonvault-plan` / `just loonvault-apply` plan, run the conftest gate, and (apply) prompt before applying the reviewed plan.
+- **CI (`lint` job)**: runs the **unit tests** (`conftest verify`) + `regal` + the compliance-matrix `--check`. No AWS creds, so it validates the *policies*, not a live plan. Pinned: `conftest 0.56.0`, `opa 1.17.0`, `regal 0.41.1`.
+- **Pre-push hook** (`.githooks/pre-push`): on your terminal, where creds live: for a changed gated stack it runs `terraform plan` → `terraform show -json` → `conftest test`, blocking the push on a denial. Skips automatically in the devcontainer (`DEVCONTAINER=true`, no creds) and via `SKIP_POLICY_GATE=1` / `git push --no-verify`.
+- **`just` recipes**: `just policy-test` (unit tests); `just loonvault-plan` / `just loonvault-apply` plan, run the conftest gate, and (apply) prompt before applying the reviewed plan.
 
-**Scope:** the plan-gate currently covers the **`loonvault`** stack only. `infra/frontend` is excluded — its snapshots bucket is a deliberate public-read exception that the storage policy would deny; gating it needs a documented policy exception first.
+**Scope:** the plan-gate currently covers the **`loonvault`** stack only. `infra/frontend` is excluded: its snapshots bucket is a deliberate public-read exception that the storage policy would deny; gating it needs a documented policy exception first.
 
 **Install conftest on your terminal** (pinned to match CI):
 ```bash
@@ -66,7 +66,7 @@ sudo tar xzf /tmp/conftest.tgz -C /usr/local/bin conftest
 ## Validation artifacts (audit evidence)
 
 Every real-plan evaluation (the pre-push hook and `just loonvault-plan`/`-apply`, via
-`scripts/policy-report.sh`) records a per-run artifact to **`policy-reports/`** — written on
+`scripts/policy-report.sh`) records a per-run artifact to **`policy-reports/`**: written on
 both pass and fail. This is the per-deploy *result* evidence (complementing `COMPLIANCE.md`,
 which is *coverage*). AWS's pattern-based policy-as-code guidance recommends retaining these so
 results travel with the change record for audit instead of vanishing into logs.
@@ -90,7 +90,7 @@ runner writes the same artifact to its handoff/evidence location.
 
 | Pattern | Rule | OSFI B-13 | GC |
 |---|---|---|---|
-| networking | No `0.0.0.0/0` / `::/0` ingress on admin ports 22/3389 | Cyber Security – Infrastructure security | — |
-| networking | DB ingress (5432) must be SG-to-SG (no CIDR) | Cyber Security – Infrastructure security | — |
+| networking | No `0.0.0.0/0` / `::/0` ingress on admin ports 22/3389 | Cyber Security – Infrastructure security |, |
+| networking | DB ingress (5432) must be SG-to-SG (no CIDR) | Cyber Security – Infrastructure security |, |
 | storage | Every bucket has a BPA (all four flags true); no public ACL; no public bucket policy | Cyber Security – Data security (at rest) | GR06 |
 | baseline | Provider region must be `ca-central-1` | Cyber Security – Infrastructure security | GR05 |
