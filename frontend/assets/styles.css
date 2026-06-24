@@ -51,8 +51,8 @@ header.site nav a:hover { color: var(--text); }
 footer.site { border-top: 1px solid var(--border); color: var(--muted); padding: 2rem 1.5rem; text-align: center; font-size: 0.85rem; }
 
 main { max-width: 76ch; margin: 0 auto; padding: 2rem 1.5rem 3rem; }
-/* Landing page uses ~2x the width of the docs reader (which keeps its 76ch measure). */
-main:not(.docs-main) { max-width: 152ch; }
+/* Landing page uses ~4x the width of the docs reader (which keeps its 76ch measure). */
+main:not(.docs-main) { max-width: 304ch; }
 
 /* prose */
 .prose h1 { font-size: 1.6rem; letter-spacing: -0.02em; margin: 0 0 1.25rem; }
