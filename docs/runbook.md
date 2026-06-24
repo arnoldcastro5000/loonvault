@@ -21,13 +21,31 @@ holds no AWS credentials) with an active IAM Identity Center session.
    alert_email = "you@example.com"
    ```
 4. **Frontend stack (always-on).** Apply once and leave up — it holds the public snapshots
-   bucket and survives every backend `destroy`:
+   bucket and the origin-protected site Lambda, and survives every backend `destroy`:
    ```bash
    cp infra/frontend/backend.hcl.example infra/frontend/backend.hcl
    # edit: set bucket = loonvault-tfstate-<YOUR_ACCOUNT_ID>
    just frontend-init
    just frontend-apply
    ```
+
+5. **Frontend origin protection (one-time, out of band — ADR-0013).** Two things Terraform
+   does not manage, so the secret never enters state and the provider-version gap is avoided:
+   ```bash
+   # a) the dedicated site origin secret (Cloudflare injects it; the Lambda validates it)
+   aws ssm put-parameter --name /loonvault/frontend/origin-secret \
+     --type SecureString --value "$(openssl rand -hex 32)"
+
+   # b) the public InvokeFunction permission the NONE Function URL needs since Oct 2025.
+   #    aws_lambda_function_url auto-creates the InvokeFunctionUrl statement; this is the
+   #    second required statement (AWS docs: lambda/latest/dg/urls-auth). Without it the
+   #    URL returns AWS's 403 "Forbidden" before the handler runs — even with AuthType=NONE.
+   aws lambda add-permission --function-name loonvault-site \
+     --statement-id FunctionURLInvokeAllowPublicAccess \
+     --action lambda:InvokeFunction --principal "*" --invoked-via-function-url
+   ```
+   Verify: `curl -i https://<function-url>/` with no header → the handler's plain `forbidden`
+   (403), not the AWS JSON. If the site Lambda is ever recreated, re-run step (b).
 
 ## Org guardrails — region-lock SCP (one-time, management account)
 

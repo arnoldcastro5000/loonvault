@@ -53,6 +53,14 @@ presents a valid AWS certificate), so transport is HTTPS end-to-end. The Functio
 `AuthType NONE`; the **secret header is the gate** — a direct request to the Function URL without the
 header gets a 403, exactly like the API.
 
+**Public-access permissions.** A `NONE` Function URL needs *two* resource-based statements:
+`lambda:InvokeFunctionUrl` (auto-created by `aws_lambda_function_url`) **and**, since October 2025,
+`lambda:InvokeFunction` (invoked-via-function-url). Missing the second returns AWS's own `403 Forbidden`
+*before the handler runs*. The pinned aws provider (5.100) predates the `invoked_via_function_url`
+argument, so that second statement is created **out of band** via the runbook — the same pattern as the
+SSM origin secret, keeping the provider-version gap out of the Terraform. Public invoke is safe here: the
+gate is the in-handler `X-Origin-Secret` check, and a direct invoke with no header returns 403.
+
 **The Cloudflare side is a Worker** (`cloudflare/worker.js`), not a plain Transform Rule. A reverse-proxy
 Worker bound to `loonvault.cloudsecuritypractice.com/*` does the edge work in code: it **allowlists the
 exact paths/methods** (the site's `/`, `/index.html`, `/docs.html`, `/assets/*`, `/content/*`), enforces
