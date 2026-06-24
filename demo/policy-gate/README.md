@@ -1,4 +1,4 @@
-# Crown-jewel demo — OPA policy gate blocks an attack (scenario #4)
+# Crown-jewel demo: OPA policy gate blocks an attack (scenario #4)
 
 This is the attack-and-defense demonstration for **scenario #4** in `plan.md` (tagged the
 "crown jewel"): a change that opens **SSH to the entire internet** and creates a **public S3
@@ -6,9 +6,9 @@ bucket** is **blocked before deploy** by the OPA/conftest policy gate.
 
 ## What `run.sh` does
 1. Generates two throwaway Terraform configs in a temp dir:
-   - **bad** — `0.0.0.0/0:22` ingress, an S3 bucket with no Block Public Access, and a public
+   - **bad**: `0.0.0.0/0:22` ingress, an S3 bucket with no Block Public Access, and a public
      bucket policy (`Principal: "*"`).
-   - **good** — the compliant counterpart (SG-to-SG DB ingress, a bucket *with* BPA).
+   - **good**: the compliant counterpart (SG-to-SG DB ingress, a bucket *with* BPA).
 2. Runs `terraform init` + `plan` + `show -json` for each.
 3. Runs the **real** policy gate (`scripts/policy-report.sh`) on each plan.
 4. Writes the captured output + per-run JSON artifact to `docs/demo/policy-gate/`.

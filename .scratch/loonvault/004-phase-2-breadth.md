@@ -1,5 +1,5 @@
 ---
-title: "Phase 2 — Breadth"
+title: "Phase 2: Breadth"
 status: open
 labels: [ready-for-agent]
 created: 2026-06-07
@@ -7,9 +7,9 @@ created: 2026-06-07
 
 ## Problem Statement
 
-After Phase 1, LoonVault serves one Series (CPI) through a secured pipeline. The platform is correct but narrow: a single endpoint returning one indicator is not a meaningful cost-of-living API, and the three Pressure Metrics — the analytically distinctive part of LoonVault's value proposition — do not exist yet. The admin plane is also missing: there is no way to trigger a manual refresh or perform any privileged operation without directly invoking AWS services, which bypasses the audit trail and exposes the raw AWS surface.
+After Phase 1, LoonVault serves one Series (CPI) through a secured pipeline. The platform is correct but narrow: a single endpoint returning one indicator is not a meaningful cost-of-living API, and the three Pressure Metrics, the analytically distinctive part of LoonVault's value proposition, do not exist yet. The admin plane is also missing: there is no way to trigger a manual refresh or perform any privileged operation without directly invoking AWS services, which bypasses the audit trail and exposes the raw AWS surface.
 
-The portfolio story is also incomplete at Phase 1: attack scenario #3 (admin call without credentials blocked by Cloudflare Access) cannot be demonstrated, and the Next.js frontend — the always-on face of the project — is not deployed.
+The portfolio story is also incomplete at Phase 1: attack scenario #3 (admin call without credentials blocked by Cloudflare Access) cannot be demonstrated, and the Next.js frontend, the always-on face of the project, is not deployed.
 
 ---
 
@@ -31,7 +31,7 @@ Phase 2 verification gate: an admin action attempted without a valid CF Access s
 
 ### Additional Series
 
-1. As the data pipeline, I want the Ingest Lambda to fetch all configured Series from BoC Valet — CPI, M2, CAD/USD exchange rate, overnight rate, 10-year GoC bond yield, 2-year GoC bond yield, BCPI, and bank credit — on the daily EventBridge schedule, so that all raw data required for the Pressure Metrics is available in S3 and RDS.
+1. As the data pipeline, I want the Ingest Lambda to fetch all configured Series from BoC Valet, CPI, M2, CAD/USD exchange rate, overnight rate, 10-year GoC bond yield, 2-year GoC bond yield, BCPI, and bank credit, on the daily EventBridge schedule, so that all raw data required for the Pressure Metrics is available in S3 and RDS.
 2. As the data pipeline, I want the Series list to be configurable via SSM Parameter Store rather than hardcoded in the Lambda, so that a new Series can be added without redeploying the Ingest Lambda.
 3. As the data pipeline, I want the Ingest Lambda to fetch each Series sequentially with a short delay between requests, so that LoonVault does not hit undocumented BoC Valet rate limits during bulk ingest.
 4. As the data pipeline, I want each Series to be written to its own S3 raw-zone object (keyed by series name and timestamp), so that a failed fetch for one Series does not block or corrupt others and each Series has an independent audit trail in S3.
@@ -59,7 +59,7 @@ Phase 2 verification gate: an admin action attempted without a valid CF Access s
 
 ### Postgres role upgrade
 
-20. As the platform, I want a `role_transformer` Postgres role added to RDS with `SELECT`, `INSERT`, and `UPDATE` on `series_observations`, so that the Transform Lambda can read back stored Series observations to compute Pressure Metrics within a single database connection — without requiring a separate read connection or relaxing the `role_writer` definition.
+20. As the platform, I want a `role_transformer` Postgres role added to RDS with `SELECT`, `INSERT`, and `UPDATE` on `series_observations`, so that the Transform Lambda can read back stored Series observations to compute Pressure Metrics within a single database connection: without requiring a separate read connection or relaxing the `role_writer` definition.
 21. As the platform, I want the Transform Lambda updated to connect as `role_transformer` instead of `role_writer` from Phase 2 onward, so that Pressure Metric computation has the read access it needs while the role change is explicitly tracked.
 22. As the platform, I want `role_writer` retained (not dropped) for any future Lambda that needs write-only access without read, so that the least-privilege role vocabulary remains usable as the system grows.
 
@@ -68,7 +68,7 @@ Phase 2 verification gate: an admin action attempted without a valid CF Access s
 23. As the platform, I want the Lambda authorizer to distinguish public routes (`/series/*`, `/pressure-metrics/*`) from admin routes (`/admin/*`) and apply different validation logic per route, so that the public API remains accessible without a CF Access session while the admin plane is fully protected.
 24. As the platform, I want the Lambda authorizer to validate the CF Access JWT on all admin routes by fetching Cloudflare's public keys from the team's Access certs endpoint and verifying the JWT signature, expiry, and issuer, so that a forged or replayed CF Access token is rejected at the origin.
 25. As the platform, I want the Lambda authorizer to cache the CF Access public keys in Lambda memory (with a TTL), so that a cold-start key fetch does not add latency to every admin request and a Cloudflare key rotation is picked up within the cache TTL.
-26. As the platform, I want the Lambda authorizer to require both a valid `X-Origin-Secret` header and a valid CF Access JWT for all admin routes, so that neither control alone is sufficient — an attacker who obtains the origin secret still cannot reach the admin Lambda without a valid CF Access session.
+26. As the platform, I want the Lambda authorizer to require both a valid `X-Origin-Secret` header and a valid CF Access JWT for all admin routes, so that neither control alone is sufficient: an attacker who obtains the origin secret still cannot reach the admin Lambda without a valid CF Access session.
 27. As the platform, I want the admin's email extracted from the validated CF Access JWT to be passed to the admin Lambda as a request context field, so that every admin action is attributable to a specific identity in CloudWatch Logs.
 
 ### Admin Lambda
@@ -85,21 +85,21 @@ Phase 2 verification gate: an admin action attempted without a valid CF Access s
 34. As the platform administrator, I want the CF Access policy's allow list restricted to my own email address, so that no other identity can authenticate to the admin plane even if they have Cloudflare credentials.
 35. As the platform, I want Cloudflare Access configured to issue a JWT on successful authentication that the Lambda authorizer can verify using Cloudflare's published public keys, so that the Zero-Trust session proof travels with the request all the way to the origin.
 36. As the platform, I want Cloudflare Access managed in Terraform alongside all other Cloudflare resources, so that access policy changes go through CI gates and are version-controlled.
-37. As the platform, I want a Cloudflare Cache Rule that explicitly bypasses caching for all `/admin/*` routes, so that admin responses — including 403s from Cloudflare Access on unauthenticated requests — are never served stale from the edge cache.
-38. As the developer, I want to demonstrate attack scenario #3 — an admin API call attempted without a valid CF Access session is blocked before reaching the origin — with a live recording, so that the identity control is evidenced in the portfolio.
+37. As the platform, I want a Cloudflare Cache Rule that explicitly bypasses caching for all `/admin/*` routes, so that admin responses, including 403s from Cloudflare Access on unauthenticated requests, are never served stale from the edge cache.
+38. As the developer, I want to demonstrate attack scenario #3, an admin API call attempted without a valid CF Access session is blocked before reaching the origin, with a live recording, so that the identity control is evidenced in the portfolio.
 
 ### Next.js frontend
 
 39. As a Canadian consumer, I want a Data Analysis section showing the current value and most recent observation date for every Indicator (all Series and all Pressure Metrics), so that I can see key economic pressure signals at a glance without calling the API directly.
 40. As a Canadian consumer, I want each Indicator displayed with a human-readable label and a brief description of what it measures, so that the data is interpretable without an economics background.
-41. As a Canadian consumer, I want the Data Analysis section to display a "data unavailable" state gracefully when the AWS backend is offline (e.g. after `terraform destroy`), so that the rest of the site remains fully usable — Home, Posture, Compliance, and the GitHub link are always-on independently of the backend.
+41. As a Canadian consumer, I want the Data Analysis section to display a "data unavailable" state gracefully when the AWS backend is offline (e.g. after `terraform destroy`), so that the rest of the site remains fully usable: Home, Posture, Compliance, and the GitHub link are always-on independently of the backend.
 42. As a Canadian consumer, I want the frontend to show the Pressure Metrics visually distinguished from raw Series, so that I can understand at a glance which indicators are derived vs. directly from the Bank of Canada.
-43. As the developer, I want the Next.js site structured with five nav sections — **Home**, **Data Analysis**, **Posture** (Threat Model + Security Controls sub-pages), **Compliance** (OSFI + GC Cloud Guardrails sub-pages), and a **GitHub** external link — so that Phase 3 documentation content slots into the Posture and Compliance sections without restructuring the site.
+43. As the developer, I want the Next.js site structured with five nav sections, **Home**, **Data Analysis**, **Posture** (Threat Model + Security Controls sub-pages), **Compliance** (OSFI + GC Cloud Guardrails sub-pages), and a **GitHub** external link, so that Phase 3 documentation content slots into the Posture and Compliance sections without restructuring the site.
 44. As the developer, I want the Next.js frontend built with `output: 'export'` producing per-route `.html` files, so that each page is directly addressable on the S3 REST endpoint without routing workarounds.
 45. As the developer, I want `just deploy-frontend` to build and sync the static output to the S3 bucket (`ca-central-1`, REST endpoint), so that the site is hosted on AWS without CloudFront or any intermediate CDN layer beyond Cloudflare.
 46. As the developer, I want Cloudflare DNS for `loonvault.cloudsecuritypractice.com` pointing to the S3 REST endpoint with the Cloudflare proxy enabled, so that Cloudflare provides CDN caching, WAF, and DDoS protection in front of the S3 origin.
 47. As the developer, I want the frontend to call the public API at `https://api-loonvault.cloudsecuritypractice.com` (not the raw API Gateway URL), so that all API traffic from the frontend passes through Cloudflare WAF and rate limiting.
-48. As the developer, I want the frontend to be always-on even when the AWS backend stack is destroyed, so that the portfolio URL — including the documentation section — remains live between interview windows at negligible cost.
+48. As the developer, I want the frontend to be always-on even when the AWS backend stack is destroyed, so that the portfolio URL, including the documentation section, remains live between interview windows at negligible cost.
 49. As the developer, I want the documentation section to display a "content coming in Phase 3" placeholder in Phase 2, so that the site structure and navigation are verified working before the documentation content is written.
 50. As the developer, I want `npm audit` to run in GitHub Actions on every push against the frontend `package.json`, so that vulnerable Next.js or React dependencies are caught in CI alongside pip-audit for the Python dependencies.
 
@@ -119,7 +119,7 @@ All Lambdas remain Python. The admin Lambda introduced in Phase 2 follows the sa
 
 ### Pressure Metric computation placement
 
-Pressure Metrics are computed inside the Transform Lambda at ingest time and stored in `series_observations` alongside raw Series rows — not computed at read time in the Read Lambda. This was decided in the platform PRD and is locked: it means the Read Lambda queries RDS for both Series and Pressure Metrics identically, and the computation cost is paid once at ingest, not on every read.
+Pressure Metrics are computed inside the Transform Lambda at ingest time and stored in `series_observations` alongside raw Series rows: not computed at read time in the Read Lambda. This was decided in the platform PRD and is locked: it means the Read Lambda queries RDS for both Series and Pressure Metrics identically, and the computation cost is paid once at ingest, not on every read.
 
 The Transform Lambda queries the `series_observations` table for all required input Series observations for the relevant date range after upserting the newly ingested Series observation, then computes and upserts each affected Pressure Metric. This requires `SELECT` access, which is why `role_transformer` replaces `role_writer` for the Transform Lambda in Phase 2.
 
@@ -127,7 +127,7 @@ The Transform Lambda queries the `series_observations` table for all required in
 
 BoC Valet Series are not always published on the same calendar date. Real M2 requires M2 and CPI; both are monthly but may lag by different amounts. The strategy: for each Pressure Metric, find the most recent date on which all required input Series have an observation, compute for that date, and upsert. If no such date exists, skip. This is evaluated on every ingest run, so Pressure Metric observations catch up as each required Series arrives.
 
-### `series_observations` schema — no changes needed
+### `series_observations` schema: no changes needed
 
 The table schema established in Phase 1 (`series_name`, `observation_date`, `value`, `ingested_at`, primary key `(series_name, observation_date)`) accommodates Pressure Metric rows without modification. Pressure Metric rows use canonical names (`real_m2`, `yield_curve_spread`, `bank_credit_growth_rate`) as `series_name`. The upsert semantics are identical to Series rows.
 
@@ -143,7 +143,7 @@ The table schema established in Phase 1 (`series_name`, `observation_date`, `val
 { "pressure_metrics": ["real_m2", "yield_curve_spread", "bank_credit_growth_rate"] }
 ```
 
-**`GET /pressure-metrics/{name}`** — same shape as `GET /series/{name}` with an additional `derived_from` field:
+**`GET /pressure-metrics/{name}`**: same shape as `GET /series/{name}` with an additional `derived_from` field:
 ```
 {
   "name": "real_m2",
@@ -155,7 +155,7 @@ The table schema established in Phase 1 (`series_name`, `observation_date`, `val
 }
 ```
 
-**`POST /admin/refresh/{series_name}`** — admin only (CF Access JWT + origin secret required)
+**`POST /admin/refresh/{series_name}`**: admin only (CF Access JWT + origin secret required)
 - Request body: empty
 - Response (202): `{ "triggered": true, "series_name": "<name>" }`
 - Response (400): `{ "error": "unknown series name" }`
@@ -174,13 +174,13 @@ The CF Access application and policy are managed in Terraform using the Cloudfla
 
 ### Admin Lambda IAM role
 
-`lambda:InvokeFunction` on the Ingest Lambda ARN only. No S3, no RDS, no Secrets Manager access. The admin Lambda does not connect to the database — it only triggers the Ingest Lambda, which handles its own credential retrieval.
+`lambda:InvokeFunction` on the Ingest Lambda ARN only. No S3, no RDS, no Secrets Manager access. The admin Lambda does not connect to the database: it only triggers the Ingest Lambda, which handles its own credential retrieval.
 
 ### Next.js frontend on S3
 
-Built with **Next.js/TypeScript** using `output: 'export'`. The export produces per-route `.html` files, each directly addressable as an S3 object key on the REST endpoint — no routing workarounds or Lambda@Edge needed.
+Built with **Next.js/TypeScript** using `output: 'export'`. The export produces per-route `.html` files, each directly addressable as an S3 object key on the REST endpoint: no routing workarounds or Lambda@Edge needed.
 
-**Build and deploy**: `just deploy-frontend` (wraps `npm run build && aws s3 sync out/ s3://loonvault-frontend/`). Run from the developer's local terminal alongside `just apply` — no AWS credentials in GitHub Actions. The S3 bucket is public-read with static website serving disabled; Cloudflare is the only intended entry point.
+**Build and deploy**: `just deploy-frontend` (wraps `npm run build && aws s3 sync out/ s3://loonvault-frontend/`). Run from the developer's local terminal alongside `just apply`: no AWS credentials in GitHub Actions. The S3 bucket is public-read with static website serving disabled; Cloudflare is the only intended entry point.
 
 **TLS**: the S3 REST endpoint (`<bucket>.s3.ca-central-1.amazonaws.com`) serves HTTPS with a valid AWS-issued certificate. This enables Cloudflare Full-strict TLS (Cloudflare → origin must be HTTPS with a valid cert). The S3 website endpoint (HTTP-only) cannot satisfy Full-strict and is not used.
 
@@ -189,7 +189,7 @@ Built with **Next.js/TypeScript** using `output: 'export'`. The export produces 
 **Navigation structure**: five nav sections with a shared header:
 
 - **Home** (Phase 2): static summary of the project, its goals, and outcomes. Always-on, no API calls.
-- **Data Analysis** (Phase 2): fetches `GET /series` and `GET /pressure-metrics` to discover available Indicators, then fetches each with `?limit=1` for the latest value. Displays all Indicators with human-readable labels, observation dates, and visual distinction between Series and Pressure Metrics. Degrades gracefully when the backend is offline — shows "data unavailable" rather than a broken page.
+- **Data Analysis** (Phase 2): fetches `GET /series` and `GET /pressure-metrics` to discover available Indicators, then fetches each with `?limit=1` for the latest value. Displays all Indicators with human-readable labels, observation dates, and visual distinction between Series and Pressure Metrics. Degrades gracefully when the backend is offline: shows "data unavailable" rather than a broken page.
 - **Posture** (structure Phase 2, content Phase 3): dropdown sub-pages for **Threat Model** and **Security Controls**. Displays "content coming in Phase 3" placeholder in Phase 2. Purely static.
 - **Compliance** (structure Phase 2, content Phase 3): dropdown sub-pages for **OSFI** (B-13 / E-23 mapping) and **GC Cloud Guardrails** mapping. Displays placeholder in Phase 2. Purely static.
 - **GitHub ↗** (Phase 2): nav item that opens the project repo in a new tab. Not a rendered page.
@@ -200,26 +200,26 @@ Built with **Next.js/TypeScript** using `output: 'export'`. The export produces 
 
 ## Testing Decisions
 
-**What makes a good test for Phase 2**: Pressure Metric computation is the most logic-dense new code in this phase and the most likely place for silent correctness bugs. Good tests feed known input Series observations and assert on the exact computed Pressure Metric values — not on whether a database call was made. Date alignment edge cases (missing input Series for a date, lagged publication) must be covered by unit tests because they are invisible in integration tests unless that exact condition is present in live data.
+**What makes a good test for Phase 2**: Pressure Metric computation is the most logic-dense new code in this phase and the most likely place for silent correctness bugs. Good tests feed known input Series observations and assert on the exact computed Pressure Metric values: not on whether a database call was made. Date alignment edge cases (missing input Series for a date, lagged publication) must be covered by unit tests because they are invisible in integration tests unless that exact condition is present in live data.
 
-### Seam 1 — OPA/Conftest (established in Phase 0, unchanged)
+### Seam 1: OPA/Conftest (established in Phase 0, unchanged)
 
 No new policy rules needed for Phase 2. The existing policies fire on any new IAM roles (admin Lambda execution role must follow least-privilege shape).
 
-### Seam 1c — Semgrep TypeScript/React SAST (first meaningful results in Phase 2)
+### Seam 1c: Semgrep TypeScript/React SAST (first meaningful results in Phase 2)
 
 - `p/typescript` + `p/react` rules fire for the first time when the Next.js frontend code is added
 - Key checks: no `dangerouslySetInnerHTML` with unescaped user-controlled content, no `eval()`, no unsafe `postMessage` handling, no prototype pollution patterns
-- API response data rendered to the DOM must flow through React's built-in escaping — Semgrep flags any bypass
+- API response data rendered to the DOM must flow through React's built-in escaping: Semgrep flags any bypass
 - Prior art: configured in Phase 0, ran clean through Phase 1 (no TypeScript code). This phase is where these rules become load-bearing.
 
-### Seam 2 — Checkov (established in Phase 0, unchanged)
+### Seam 2: Checkov (established in Phase 0, unchanged)
 
 Fires on Cloudflare Access resources only to the extent the Cloudflare Terraform provider has Checkov rules. No new AWS resource types introduced in Phase 2 beyond the admin Lambda (covered by existing Lambda checks).
 
-### Seam 3 — Lambda handler unit tests (established in Phase 1, extended here)
+### Seam 3: Lambda handler unit tests (established in Phase 1, extended here)
 
-**Transform Lambda — Pressure Metric computation** (highest priority in Phase 2):
+**Transform Lambda: Pressure Metric computation** (highest priority in Phase 2):
 - Given stored M2 and CPI observations for the same date, assert Real M2 is computed correctly (M2 ÷ CPI)
 - Given stored 10Y and 2Y bond yield observations for the same date, assert Yield Curve Spread is computed correctly (10Y − 2Y)
 - Given stored bank credit observations for two consecutive months, assert Bank Credit Growth Rate is computed correctly (MoM % change)
@@ -227,7 +227,7 @@ Fires on Cloudflare Access resources only to the extent the Cloudflare Terraform
 - Given only one month of bank credit data, assert no Bank Credit Growth Rate row is produced (insufficient history)
 - Given corrected upstream M2 value for a past date, assert Real M2 for that date is recomputed on next ingest run
 
-**Lambda authorizer — admin path**:
+**Lambda authorizer: admin path**:
 - Given a valid `X-Origin-Secret` and valid CF Access JWT (signed with test key, correct issuer, not expired), assert allow policy returned
 - Given a valid `X-Origin-Secret` and expired CF Access JWT, assert deny policy returned
 - Given a valid `X-Origin-Secret` and JWT with wrong issuer, assert deny policy returned
@@ -238,7 +238,7 @@ Fires on Cloudflare Access resources only to the extent the Cloudflare Terraform
 - Given a valid request for a known series name, assert the Ingest Lambda invoke is triggered and 202 returned
 - Given a valid request for an unknown series name, assert 400 returned without invoking the Ingest Lambda
 
-**Read Lambda — extended**:
+**Read Lambda: extended**:
 - Given `GET /pressure-metrics/real_m2` with mock DB result, assert correct JSON shape including `derived_from` field
 - Given `GET /pressure-metrics/unknown`, assert 404
 - Given `GET /series` (list endpoint), assert all configured series names returned
@@ -246,7 +246,7 @@ Fires on Cloudflare Access resources only to the extent the Cloudflare Terraform
 
 Prior art: the Lambda handler unit test pattern established in Phase 1 applies directly. All new Lambda tests follow the same `handler(event, context) → response` interface with SDK boundary mocking.
 
-### Seam 4 — HTTP API integration tests (requires deployed stack, extended here)
+### Seam 4: HTTP API integration tests (requires deployed stack, extended here)
 
 - `GET /pressure-metrics/real_m2` returns HTTP 200 with observations and `derived_from: ["M2", "CPI"]`
 - `GET /pressure-metrics/yield_curve_spread` returns HTTP 200 with observations including at least one negative value (historical inversion)
@@ -258,22 +258,22 @@ Prior art: the Lambda handler unit test pattern established in Phase 1 applies d
 
 ## Out of Scope
 
-- **Full detection pipeline** — Phase 3. VPC Flow Logs are already enabled; the five additional detection rules (root usage, no-MFA, IAM widened, SG changed, AccessDenied spike) are not wired in Phase 2.
-- **Prowler compliance scan** — Phase 3.
-- **STRIDE threat model document** — Phase 3 deliverable.
-- **OSFI B-13 / E-23 and GC Cloud Guardrails mapping matrices** — Phase 3 deliverables.
-- **Attack demonstration clips** — Phase 4, except scenario #3 (admin without credentials) which is verified in the Phase 2 gate and should be recorded at that point.
-- **Blog post** — Phase 4.
-- **Auto-remediation mini-SOAR** — stretch goal.
-- **Statistics Canada as a data source** — locked out by ADR-0001.
-- **Rich frontend beyond MVP dashboard** — the Phase 2 frontend is a minimal always-on display; charts, historical plots, and mobile optimisation are not in scope.
+- **Full detection pipeline**: Phase 3. VPC Flow Logs are already enabled; the five additional detection rules (root usage, no-MFA, IAM widened, SG changed, AccessDenied spike) are not wired in Phase 2.
+- **Prowler compliance scan**: Phase 3.
+- **STRIDE threat model document**: Phase 3 deliverable.
+- **OSFI B-13 / E-23 and GC Cloud Guardrails mapping matrices**: Phase 3 deliverables.
+- **Attack demonstration clips**: Phase 4, except scenario #3 (admin without credentials) which is verified in the Phase 2 gate and should be recorded at that point.
+- **Blog post**: Phase 4.
+- **Auto-remediation mini-SOAR**: stretch goal.
+- **Statistics Canada as a data source**: locked out by ADR-0001.
+- **Rich frontend beyond MVP dashboard**: the Phase 2 frontend is a minimal always-on display; charts, historical plots, and mobile optimisation are not in scope.
 
 ---
 
 ## Further Notes
 
-- **Canonical Series names**: the Series names used as `series_name` values in `series_observations` and as URL path segments must be agreed before Phase 2 begins and treated as stable identifiers — changing them later requires a data migration and a breaking API change. Suggested canonical names: `CPI`, `M2`, `CAD_USD`, `OVERNIGHT_RATE`, `BOND_YIELD_10Y`, `BOND_YIELD_2Y`, `BCPI`, `BANK_CREDIT`. Pressure Metric names: `real_m2`, `yield_curve_spread`, `bank_credit_growth_rate`. All lowercase for Pressure Metrics (they are derived, not sourced) and uppercase for Series (they are sourced identifiers matching BoC Valet conventions).
+- **Canonical Series names**: the Series names used as `series_name` values in `series_observations` and as URL path segments must be agreed before Phase 2 begins and treated as stable identifiers: changing them later requires a data migration and a breaking API change. Suggested canonical names: `CPI`, `M2`, `CAD_USD`, `OVERNIGHT_RATE`, `BOND_YIELD_10Y`, `BOND_YIELD_2Y`, `BCPI`, `BANK_CREDIT`. Pressure Metric names: `real_m2`, `yield_curve_spread`, `bank_credit_growth_rate`. All lowercase for Pressure Metrics (they are derived, not sourced) and uppercase for Series (they are sourced identifiers matching BoC Valet conventions).
 - **BoC Valet series codes**: each canonical Series name maps to a specific BoC Valet series code (e.g. CPI maps to `STATIC_TOTPCPIALLINDX`). These mappings belong in SSM Parameter Store alongside the series list, not hardcoded in the Lambda, so they can be corrected without a redeploy if BoC Valet codes change.
-- **Phase 2 understanding gate** (from plan.md): before starting Phase 3, be able to answer without notes — why Zero-Trust (CF Access + MFA) beats network-based admin access; why validating the CF Access JWT at the origin matters and what the shared-secret header alone does not prevent; the three identities in the system (public consumer, privileged admin, machine/IAM role) and how each authenticates; where rate limiting and throttling happen and why defense-in-depth across both Cloudflare and API Gateway matters.
+- **Phase 2 understanding gate** (from plan.md): before starting Phase 3, be able to answer without notes: why Zero-Trust (CF Access + MFA) beats network-based admin access; why validating the CF Access JWT at the origin matters and what the shared-secret header alone does not prevent; the three identities in the system (public consumer, privileged admin, machine/IAM role) and how each authenticates; where rate limiting and throttling happen and why defense-in-depth across both Cloudflare and API Gateway matters.
 - **Frontend graceful degradation**: the Next.js frontend should detect a non-200 response from the API and display a static "data temporarily unavailable" message rather than a JS error. This is the primary resilience requirement for the always-on frontend when the AWS backend is destroyed between interviews.
 - **Frontend S3 bucket**: the public S3 bucket (`ca-central-1`, REST endpoint) and the Next.js static files remain always-on at negligible cost. The AWS backend (Lambda, RDS, API Gateway) is ephemeral; the frontend and its Cloudflare DNS record are not.
