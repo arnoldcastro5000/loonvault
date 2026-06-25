@@ -38,17 +38,60 @@ a:hover { text-decoration: underline; }
 /* header / footer */
 header.site {
   border-bottom: 1px solid var(--border);
-  padding: 1rem 1.5rem;
+  padding: 0 1.5rem;
   display: flex;
-  gap: 1.5rem;
-  align-items: baseline;
+  gap: 1rem;
+  align-items: stretch;
   flex-wrap: wrap;
 }
-header.site .brand { font-weight: 700; letter-spacing: -0.01em; }
-header.site nav { display: flex; gap: 1.25rem; }
-header.site nav a { color: var(--muted); }
-header.site nav a:hover { color: var(--text); }
+header.site .brand { font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; }
 footer.site { border-top: 1px solid var(--border); color: var(--muted); padding: 2rem 1.5rem; text-align: center; font-size: 0.85rem; }
+
+/* top tab bar (mirrors the prowler-cspm dashboard nav, in loonvault tokens) */
+.tabbar { display: flex; align-items: stretch; flex: 1 1 auto; flex-wrap: wrap; }
+.tabbar .tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.9rem 0.85rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+.tabbar .tab:hover { color: var(--text); text-decoration: none; }
+.tabbar .tab[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* hover/focus dropdown */
+.tab-group { position: relative; display: inline-flex; align-items: stretch; }
+.tab-menu {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  display: none;
+  min-width: 180px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  z-index: 20;
+}
+.tab-group:hover .tab-menu,
+.tab-group:focus-within .tab-menu { display: block; }
+.tab-menu a {
+  display: block;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.tab-menu a:hover { color: var(--text); background: var(--bg); text-decoration: none; }
+
+/* right-aligned social icons */
+.tab-icons { margin-left: auto; display: flex; align-items: center; gap: 0.25rem; }
+.tab-icons a { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 4px; color: var(--muted); }
+.tab-icons a:hover { color: var(--text); text-decoration: none; }
+.tab-icons a.li { color: var(--accent); }
+.tab-icons svg { width: 1.15rem; height: 1.15rem; }
 
 main { max-width: 76ch; margin: 0 auto; padding: 2rem 1.5rem 3rem; }
 /* Landing page width matches https://prowler.cloudsecuritypractice.com/ (848px). Fixed
