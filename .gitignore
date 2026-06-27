@@ -50,6 +50,9 @@ yarn-error.log*
 # Handoff documents — never public
 handoff.md
 
+# Local issue tracker — may catalog open security gaps; never public
+.scratch/
+
 # Policy gate validation artifacts (per-run evidence; may contain plan detail)
 policy-reports/
 
