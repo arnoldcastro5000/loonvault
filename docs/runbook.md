@@ -147,6 +147,31 @@ terraform -chdir=infra/loonvault output api_endpoint
 # curl the endpoint with the X-Origin-Secret header; expect FXCADUSD observations
 ```
 
+## Expected alerts on first apply
+
+Two detection rules can fire legitimately during or immediately after `loonvault-apply`.
+Both are expected and do not indicate a breach.
+
+**Rule 8 -- Anomalous GetSecretValue (may fire once, timing varies)**
+
+RDS-managed master password rotation (`rds.amazonaws.com` service principal) calls
+`GetSecretValue` internally. Detection rule 8 alerts on every `GetSecretValue` in the
+account because no Lambda role holds this permission; the first rotation after apply is
+the only legitimate caller. When this alert arrives:
+
+1. Check the SNS email: confirm `userIdentity.invokedBy` is `rds.amazonaws.com` or
+   `userIdentity.type` is `AWSService`.
+2. If so: acknowledge. No action required.
+3. If the caller is any other principal: treat as a compromise indicator and investigate
+   immediately.
+
+**Rule 9 -- Detection rule tampered (fires on every apply)**
+
+`loonvault-apply` calls `events:PutRule` on every EventBridge rule it manages. The
+tamper detection rule (rule 9) watches `DeleteRule`, `DisableRule`, and `RemoveTargets`
+-- not `PutRule` -- so Terraform applies do not trigger it. If rule 9 fires unexpectedly
+(outside an apply window), treat it as a real suppression attempt.
+
 ## Destroy (after the interview)
 
 ```bash

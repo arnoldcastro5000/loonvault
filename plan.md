@@ -96,8 +96,9 @@ public keys at `https://loonvault.cloudflareaccess.com/cdn-cgi/access/certs`).
   required to compute Pressure Metrics from stored Series. `role_writer` is retained for
   future write-only consumers. No role can `DROP`, `TRUNCATE`, `DELETE`, or access another
   role's schema.
-- **Detection/response:** CloudTrail (management events + data events scoped to S3 raw-zone,
-  KMS CMKs, Lambda functions); VPC Flow Logs; six detection rules (see Detection Pipeline);
+- **Detection/response:** CloudTrail (management events -- which include KMS cryptographic
+  calls like `Decrypt`/`GenerateDataKey` -- plus data events scoped to the S3 raw-zone and
+  Lambda functions); VPC Flow Logs; nine detection rules (see Detection Pipeline);
   Prowler compliance scans; auto-remediation (stretch).
 - **Governance / shift-left:** Terraform + Checkov + tflint (Terraform correctness) + Semgrep (SAST) + Ruff (Python linter) + ESLint/`next lint` (TypeScript linter) + regal (Rego linter) + pip-audit (Python SCA) + `npm audit` (frontend SCA) + Socket.dev (supply chain) + zizmor (Actions workflow security) + actionlint (Actions correctness) + Dependency Review (PR-time) + Dependabot (automated updates) + betterleaks + TruffleHog + gitleaks (CI secret scanning) + gitleaks (pre-commit) + OPA (pre-push hook); remote state
   encrypted + locked; OPA enforces LoonVault-specific invariants (e.g. RDS SG ingress must be
@@ -141,25 +142,41 @@ public keys at `https://loonvault.cloudflareaccess.com/cdn-cgi/access/certs`).
 
 ## Detection Pipeline
 
-Six rules. EventBridge for single-occurrence signals (one event = already suspicious).
+Nine rules. EventBridge for single-occurrence signals (one event = already suspicious).
 CloudWatch Logs metric filter for rate-based signals (spike detection requires counting across
 time: EventBridge has no memory across events).
 
-| Signal | Tool | Pattern / Filter | Threshold |
-|---|---|---|---|
-| CloudTrail disabled | EventBridge → SNS | `eventName`: `StopLogging`, `DeleteTrail`, `UpdateTrail` | 1 occurrence |
-| Console sign-in without MFA | EventBridge → SNS | `source: aws.signin`, `MFAUsed: No` | 1 occurrence |
-| Root account usage | EventBridge → SNS | `userIdentity.type: Root` | 1 occurrence |
-| IAM policy widened | EventBridge → SNS | `eventName`: `PutUserPolicy`, `AttachRolePolicy`, `CreatePolicy` | 1 occurrence |
-| AccessDenied spike | CloudTrail → CW Logs → metric filter → CW Alarm → SNS | `{ ($.errorCode = "AccessDenied") }` | > 5 in 5 min |
-| Security group rule added | EventBridge → SNS | `eventName`: `AuthorizeSecurityGroupIngress`, `RevokeSecurityGroupIngress` | 1 occurrence |
+**Two trails, by design.** A persistent **organization trail** in the management account is the
+durable, tamper-resistant audit record (member accounts cannot modify, delete, or read it: the
+basis of ADR-0010). A separate **member-account trail** delivers management events into a
+CloudWatch Logs group *inside* the member account, which is what rule 6's metric filter reads (an
+org trail delivers to the management account, where a member-account filter cannot reach it). The
+org trail keeps a durable audit record independently of the ephemeral stack.
 
-AccessDenied spike = fingerprint of permission enumeration (Pacu, ScoutSuite). One
-AccessDenied is noise; a burst is an attacker probing what a compromised credential can reach.
+**Region placement.** Rules keyed on global-service events (IAM policy changes, console sign-in,
+root activity) are deployed in **us-east-1**, because AWS delivers global-service events only to
+the us-east-1 event bus; the remaining rules run in ca-central-1 alongside the stack. The
+multi-region member trail captures global-service events in its logs in either Region.
 
-Additional: CloudWatch/CloudTrail alarm on IAM policy changes that widen `rds-db:connect`
-scope, and on `GetSecretValue` against the RDS-managed master secret (which the Lambdas
-never call: any access is anomalous by definition).
+| # | Signal | B-13 Principle | Tool | Pattern / Filter | Threshold |
+|---|---|---|---|---|---|
+| 1 | CloudTrail disabled | Security monitoring & response | EventBridge → SNS | `eventName`: `StopLogging`, `DeleteTrail`, `UpdateTrail` | 1 occurrence |
+| 2 | Console sign-in without MFA | Identity & access management | EventBridge → SNS | `source: aws.signin`, `MFAUsed: No` | 1 occurrence |
+| 3 | Root account usage | Identity & access management | EventBridge → SNS | `userIdentity.type: Root` | 1 occurrence |
+| 4 | IAM policy widened | Identity & access management | EventBridge → SNS | `eventName`: `PutUserPolicy`, `AttachRolePolicy`, `CreatePolicy`, `PutRolePolicy`, `DetachRolePolicy`, `DeleteUserPolicy` | 1 occurrence |
+| 5 | Security group rule changed | Infrastructure security | EventBridge → SNS | `eventName`: `AuthorizeSecurityGroupIngress`, `RevokeSecurityGroupIngress`, `AuthorizeSecurityGroupEgress`, `RevokeSecurityGroupEgress` | 1 occurrence |
+| 6 | AccessDenied spike | Security monitoring & response | CloudTrail → CW Logs → metric filter → CW Alarm → SNS | `{ ($.errorCode = "AccessDenied") \|\| ($.errorCode = "*UnauthorizedOperation") }` | > 5 in 5 min |
+| 7 | KMS CMK disabled or deletion scheduled | Data security (at rest) | EventBridge → SNS | `source: aws.kms`, `eventName`: `DisableKey`, `ScheduleKeyDeletion`, `CancelKeyDeletion` | 1 occurrence |
+| 8 | Anomalous GetSecretValue | Identity & access management | EventBridge → SNS | `source: aws.secretsmanager`, `eventName`: `GetSecretValue` | 1 occurrence |
+| 9 | Detection rule tampered | Security monitoring & response | EventBridge → SNS | `source: aws.events`, `eventName`: `DeleteRule`, `DisableRule`, `RemoveTargets` | 1 occurrence |
+
+**Rule 6** -- AccessDenied spike is the fingerprint of permission enumeration (Pacu, ScoutSuite). One AccessDenied is noise; a burst is an attacker probing what a compromised credential can reach.
+
+**Rule 7** -- `CancelKeyDeletion` is included because cancelling a deletion implies a deletion was previously scheduled; the pair is itself suspicious and must be investigated. No keyId scoping: at LoonVault's scale (one CMK) any KMS lifecycle event is anomalous, and scoping to a specific ARN would silently miss the alert after every `destroy`/`apply` that recreates the key.
+
+**Rule 8** -- Zero-baseline signal. No Lambda execution role holds `secretsmanager:GetSecretValue`; the only Secrets Manager secret is the RDS-managed master password, accessed only by RDS internally on rotation. Any call from any other principal is a compromise indicator by construction. Known false positive: RDS-managed rotation may generate a `GetSecretValue` event (service principal `rds.amazonaws.com`); see runbook for post-apply acknowledgement procedure.
+
+**Rule 9** -- Watches for suppression-class operations: deletion, disabling, or target removal from EventBridge rules. `PutRule` is deliberately excluded (every `loonvault-apply` fires it, creating noise). Residual limitation: rule 9 cannot detect its own deletion (self-referential detection problem); production fix is a dedicated monitoring account with cross-account CloudTrail delivery.
 
 ---
 
@@ -176,7 +193,7 @@ July 1, 2025).
 | **Cyber Security** | Data security (in transit) | TLS 1.2 at every hop; Cloudflare Full-strict; `sslmode=verify-full`; `ssl_min_protocol_version=TLSv1.2` |
 | **Cyber Security** | Infrastructure security | VPC private subnets; SG-to-SG ingress only (OPA enforced); gateway VPC endpoints; SCP enforces `ca-central-1` |
 | **Cyber Security** | Threat & vulnerability management | OPA (pre-push hook) + Checkov + Semgrep (SAST) + pip-audit (SCA) + betterleaks + TruffleHog in CI; gitleaks pre-commit; Prowler post-deploy scans; SHA-pinned Actions |
-| **Cyber Security** | Security monitoring & response | CloudTrail (management + data events); 6 EventBridge/CloudWatch detection rules; incident response plan |
+| **Cyber Security** | Security monitoring & response | CloudTrail (management + data events); 9 EventBridge/CloudWatch detection rules (covers all 6 B-13 Cyber Security principles with at least one rule each); incident response plan |
 | **Technology Operations** | Change management | IaC (Terraform); CI pipeline gates; Secrets Manager automatic rotation |
 | **Governance** | Risk identification & assessment | STRIDE threat model; data classification exercise (Protected B-ready) |
 | **E-23 Third-party** | Vendor risk management | Third-party sub-service register; cloud exit strategy |
@@ -225,7 +242,7 @@ Each phase leaves a deployable, secure thing: stop at any phase and still have a
   plane (Lambda authorizer validates shared secret + CF Access JWT).
   → *Verify: admin action blocked without Access; direct API GW URL returns 403.*
 
-- **Phase 3: Detection + docs:** the five remaining detection rules live (all six active), Prowler, threat-model doc,
+- **Phase 3: Detection + docs:** the eight remaining detection rules live (all nine active), Prowler, threat-model doc,
   OSFI B-13 / E-23 mapping matrix.
   → *Verify: Prowler report produced + a triggered alert.*
 
@@ -374,7 +391,11 @@ answer its questions out loud, unaided.
 - Managed security services (GuardDuty/Security Hub/Config) enabled in **short evidence
   bursts only**: capture screenshots, then disable.
 - **Single shared KMS CMK** (~$1/mo) for S3 raw zone, RDS, and Secrets Manager (ADR-0005);
-  the Phase 0 Terraform state CMK is separate (~$1/mo) → ~$2/mo total.
+  the Phase 0 Terraform state CMK is separate (~$1/mo); the persistent **org-CloudTrail CMK**
+  in the management account is a third (~$1/mo) and survives `loonvault-destroy` → ~$3/mo
+  persistent floor at rest. The org trail also delivers a *second copy* of member-account
+  management events (the member trail is the first, free copy), billed at ~$2/100k events:
+  negligible at LoonVault's solo-developer volume.
 - CloudWatch Logs retention: **2 years** (Protected B requirement; ~$1–2/mo at LoonVault volume).
 - **Last-resort cost control:** if monthly spend exceeds budget, `just loonvault-destroy` the entire
   backend stack. Re-apply (`just loonvault-apply`) only before interviews. Frontend S3 bucket and
@@ -430,6 +451,7 @@ audit trail (CloudTrail + alarms). Documented in cloud exit strategy.
 | RDS IAM authentication | MEDIUM, app DB connections fail if the IAM/STS control plane is unavailable; token validation routes through us-east-1 (mitigated by regional STS endpoint) | Re-enable password auth + Secrets Manager as documented fallback |
 | AWS SQS | MEDIUM, Transform Lambda not triggered if unavailable; messages retained in queue and processed on recovery | Export messages via `aws sqs receive-message`; replay against replacement system |
 | AWS S3 (static frontend bucket) | LOW, Cloudflare serves cached responses during an S3 outage; frontend degrades gracefully | `aws s3 sync s3://<frontend-site-bucket>/ ./frontend/` → serve the static files from any CDN or static host |
+| AWS CloudTrail (org trail + member trail) | MEDIUM, the audit record and detection feed; org trail is the durable tamper-resistant log (mgmt account, persistent CMK), member trail feeds in-account alarms (ephemeral) | `aws s3 sync s3://<org-cloudtrail-bucket>/AWSLogs/ ./audit/` → ingest into any SIEM; logs are standard CloudTrail JSON |
 
 ---
 

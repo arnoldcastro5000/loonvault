@@ -107,6 +107,14 @@ resource "aws_kms_key" "main" {
         Action    = ["kms:GenerateDataKey*", "kms:Decrypt"]
         Resource  = "*"
       },
+      {
+        # EventBridge detection rules publish to the encrypted SNS alerts topic (detection.tf)
+        Sid       = "EventBridgeToSNS"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = ["kms:GenerateDataKey*", "kms:Decrypt"]
+        Resource  = "*"
+      },
     ]
   })
 }
@@ -126,4 +134,29 @@ resource "aws_sns_topic_subscription" "alerts_email" {
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
   endpoint  = var.alert_email
+}
+
+# SNS resource policy: grants EventBridge permission to publish.
+# Without this, EventBridge targets on the encrypted topic are silently dropped.
+resource "aws_sns_topic_policy" "alerts" {
+  arn = aws_sns_topic.alerts.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AllowAccountManagement"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${local.account_id}:root" }
+        Action    = "sns:*"
+        Resource  = aws_sns_topic.alerts.arn
+      },
+      {
+        Sid       = "AllowEventBridgePublish"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sns:Publish"
+        Resource  = aws_sns_topic.alerts.arn
+      },
+    ]
+  })
 }
