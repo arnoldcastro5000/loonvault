@@ -174,7 +174,7 @@ multi-region member trail captures global-service events in its logs in either R
 
 **Rule 7** -- `CancelKeyDeletion` is included because cancelling a deletion implies a deletion was previously scheduled; the pair is itself suspicious and must be investigated. No keyId scoping: at LoonVault's scale (one CMK) any KMS lifecycle event is anomalous, and scoping to a specific ARN would silently miss the alert after every `destroy`/`apply` that recreates the key.
 
-**Rule 8** -- Zero-baseline signal. No Lambda execution role holds `secretsmanager:GetSecretValue`; the only Secrets Manager secret is the RDS-managed master password, accessed only by RDS internally on rotation. Any call from any other principal is a compromise indicator by construction. Known false positive: RDS-managed rotation may generate a `GetSecretValue` event (service principal `rds.amazonaws.com`); see runbook for post-apply acknowledgement procedure.
+**Rule 8** -- Zero-standing-baseline signal. No automated, always-on principal holds `secretsmanager:GetSecretValue`: no Lambda execution role has it, and the only Secrets Manager secret is the RDS-managed master password. Every `GetSecretValue` event therefore resolves to one of three things: (a) RDS-managed rotation (service principal `rds.amazonaws.com`), (b) a deliberate, rare operator maintenance action -- `db-init` on every stack bring-up (ADR-0008) or the documented cloud-exit export, both run with the operator's own credentials -- or (c) a compromise. The rule fires on all three (expected-but-logged): the operator acknowledges (a) and (b) and investigates anything else. See runbook for the triage procedure.
 
 **Rule 9** -- Watches for suppression-class operations: deletion, disabling, or target removal from EventBridge rules. `PutRule` is deliberately excluded (every `loonvault-apply` fires it, creating noise). Residual limitation: rule 9 cannot detect its own deletion (self-referential detection problem); production fix is a dedicated monitoring account with cross-account CloudTrail delivery.
 
@@ -396,7 +396,12 @@ answer its questions out loud, unaided.
   persistent floor at rest. The org trail also delivers a *second copy* of member-account
   management events (the member trail is the first, free copy), billed at ~$2/100k events:
   negligible at LoonVault's solo-developer volume.
-- CloudWatch Logs retention: **2 years** (Protected B requirement; ~$1–2/mo at LoonVault volume).
+- **Log retention is minimized for cost, not set to the compliance bar** (see Residual Risk #8).
+  Protected B's actual requirement is **2-year** retention of security logs; LoonVault
+  deliberately under-retains for this PoC: operational and member-trail logs (Lambda, API
+  Gateway, VPC Flow Logs, the member CloudTrail feed) at **30 days**, the persistent org trail
+  at **~400 days**. Production sets all security-log retention to >= 2 years (still only
+  ~$1-2/mo at LoonVault volume, so this is a deliberate minimization, not a forced one).
 - **Last-resort cost control:** if monthly spend exceeds budget, `just loonvault-destroy` the entire
   backend stack. Re-apply (`just loonvault-apply`) only before interviews. Frontend S3 bucket and
   the static site files remain always-on at negligible cost. The shared CMK persists (keys are not destroyed: ~$1/mo at rest).
@@ -436,6 +441,35 @@ answer its questions out loud, unaided.
    commit SHAs. Residual risk: a zero-day compromise of a pinned SHA is undetectable without
    independent verification (e.g. Sigstore/cosign). Accepted for this POC; production upgrade
    path is dependency review automation and signed Actions verification.
+7. **Org audit trail lives in the management account, not a dedicated Log Archive account.**
+   The persistent organization CloudTrail is the tamper-resistant record member accounts
+   cannot modify, delete, or read. Because it is delivered in the **management account**:
+   which AWS Organizations SCPs intentionally never restrict: the AWS-recommended
+   deny-`StopLogging`/`DeleteTrail` SCP (AWS Prescriptive Guidance, *CloudTrail best
+   practices*; *Organizations at enormous scale*, Rule 3) does not apply to a trail placed
+   in that account. For this PoC the trail is guarded by a Terraform `prevent_destroy`
+   lifecycle block (so an IaC teardown of `infra/org` cannot remove it) and bounded by the
+   management account being near-empty and human-only, reachable solely through short-lived
+   IAM Identity Center sessions: there is no automated or public path to it. **Production
+   upgrade:** relocate the trail to a dedicated **Log Archive account**, or designate a member
+   account as the CloudTrail **delegated administrator** (AWS Security Reference Architecture /
+   Control Tower foundational OUs): either is SCP-affectable, so the deny-tamper SCP becomes
+   enforceable and org-trail-deletion alerting can live alongside it (the dedicated-monitoring-
+   account direction also noted for T-038). **Budget is not the blocker:** AWS accounts are
+   free and consolidated billing aggregates org spend, so the CMK and S3 storage **relocate
+   rather than duplicate** (~$0 marginal); the deferral is on operational-complexity grounds
+   for a solo, ephemeral PoC. Next-release consideration.
+8. **Log retention is below the Protected B 2-year bar, by deliberate cost minimization.**
+   Protected B classification calls for **2-year** retention of security logs. LoonVault
+   instead keeps operational and member-trail logs (Lambda, API Gateway, VPC Flow Logs, the
+   member CloudTrail feed) at **30 days** and the persistent org trail at **~400 days**. This
+   is a conscious cost-minimization choice for a solo, ephemeral PoC, not a forced one: at
+   LoonVault's volume full 2-year retention would still be only ~$1-2/mo. The member-trail
+   retention is in any case effectively bounded by the apply window, since that bucket is
+   `force_destroy`'d on every teardown; the org trail is the only durable record, and it is
+   the one a production deployment would raise to >= 2 years (alongside Residual Risk #7's
+   relocation to a Log Archive account). Each short-retention log group is tagged in code with
+   a `CKV_AWS_338` Checkov skip citing this residual, so the gap is explicit, not silent.
 
 ---
 

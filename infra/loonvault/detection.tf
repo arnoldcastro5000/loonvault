@@ -49,7 +49,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail" {
     id     = "expire-logs"
     status = "Enabled"
     filter {}
-    expiration { days = 731 }
+    # 30 days: live feed, not a retention store (force_destroy bucket). Protected B's
+    # 2-year requirement is documented as a cost residual in plan.md; org trail is durable.
+    expiration { days = 30 }
   }
   depends_on = [aws_s3_bucket_versioning.cloudtrail]
 }
@@ -98,11 +100,17 @@ resource "aws_s3_bucket_policy" "cloudtrail" {
 }
 
 # ── CloudWatch Logs group for trail delivery ──────────────────────────────────
-# 730-day retention meets the Protected B 2-year requirement (passes CKV_AWS_338).
+# 30-day retention: this is the live feed rule 6's metric filter reads, NOT a retention
+# system of record. The member trail's bucket is force_destroyed on every teardown, so
+# long retention here is cosmetic, and the metric filter alarms on ingestion, not on
+# stored history. The persistent org trail is the durable audit record. Protected B's
+# actual requirement is 2-year retention; deliberately under-retained to minimize cost for
+# this PoC (see plan.md "Honest Residual Risks"). Production: >= 2 years.
 
 resource "aws_cloudwatch_log_group" "cloudtrail" {
+  #checkov:skip=CKV_AWS_338:30-day retention for portfolio POC; Protected B 2-year requirement documented as a cost residual in plan.md
   name              = "/aws/cloudtrail/${local.name_prefix}"
-  retention_in_days = 731
+  retention_in_days = 30
   kms_key_id        = aws_kms_key.main.arn
 }
 
@@ -312,10 +320,13 @@ resource "aws_cloudwatch_event_target" "kms_key_lifecycle" {
 }
 
 # Rule 8: Anomalous GetSecretValue (B-13: Identity & access management, G-12)
-# Zero-baseline signal: no Lambda execution role holds secretsmanager:GetSecretValue.
-# The only secret is the RDS-managed master password; RDS handles rotation internally
-# as the rds.amazonaws.com service principal. Any other caller is a compromise indicator.
-# Known false positive: RDS rotation — see runbook §Expected alerts on first apply.
+# Zero-standing-baseline signal: no automated, always-on principal holds
+# secretsmanager:GetSecretValue (no Lambda role has it; the only secret is the
+# RDS-managed master password). Every GetSecretValue event therefore resolves to one
+# of: (a) RDS-managed rotation (rds.amazonaws.com), (b) a deliberate operator
+# maintenance action -- db-init on every bring-up (ADR-0008) or the cloud-exit export,
+# both run with the operator's own credentials -- or (c) a compromise. The rule fires
+# on all three (expected-but-logged); see runbook section "Expected alerts on first apply".
 resource "aws_cloudwatch_event_rule" "secrets_access" {
   name        = "${local.name_prefix}-secrets-access"
   description = "Rule 8: GetSecretValue called — no Lambda holds this permission (G-12)"
