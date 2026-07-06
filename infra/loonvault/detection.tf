@@ -17,6 +17,8 @@ resource "aws_s3_bucket" "cloudtrail" {
   #checkov:skip=CKV_AWS_18:access logging on this bucket creates a circular dependency; org trail S3 bucket has logging
   #checkov:skip=CKV2_AWS_61:force_destroy required — bucket is ephemeral and destroyed with loonvault-destroy
   #checkov:skip=CKV_AWS_145:SSE-S3 (AES256) is sufficient for ephemeral trail logs; org trail bucket uses CMK
+  #checkov:skip=CKV_AWS_144:Cross-region replication not required for ephemeral portfolio POC
+  #checkov:skip=CKV2_AWS_62:No event notifications on the trail log bucket
   bucket        = "${local.name_prefix}-cloudtrail-${local.account_id}"
   force_destroy = true
 }
@@ -144,6 +146,8 @@ resource "aws_iam_role_policy" "cloudtrail_cwl" {
 # ── Member-account CloudTrail trail ───────────────────────────────────────────
 
 resource "aws_cloudtrail" "main" {
+  #checkov:skip=CKV_AWS_35:Log files are SSE-S3 encrypted at the bucket; the durable org trail uses a dedicated CMK — a CMK here would add cloudtrail grants to the shared key for an ephemeral trail
+  #checkov:skip=CKV_AWS_252:No per-log-file SNS delivery notifications — alerting flows through the EventBridge rules and the metric-filter alarm on this trail's events
   name                          = local.name_prefix
   s3_bucket_name                = aws_s3_bucket.cloudtrail.id
   is_multi_region_trail         = true
