@@ -1,4 +1,5 @@
 """Lambda authorizer for HTTP API v2 — validates X-Origin-Secret header."""
+import hmac
 import logging
 import os
 import time
@@ -47,7 +48,9 @@ def handler(event: dict, _context: object) -> dict:
     except Exception:
         logger.exception("Failed to retrieve origin secret from SSM — denied")
         return {"isAuthorized": False}
-    if token != expected:
+    # Constant-time compare — same as the site Lambda; a plain != leaks
+    # match-prefix length through response timing.
+    if not hmac.compare_digest(token, expected):
         logger.info("X-Origin-Secret mismatch — denied")
         return {"isAuthorized": False}
     return {"isAuthorized": True}
