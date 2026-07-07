@@ -144,11 +144,25 @@ resource "aws_sns_topic_policy" "alerts" {
     Version = "2012-10-17"
     Statement = [
       {
+        # SNS rejects "sns:*" in topic policies ("action out of service scope"):
+        # the wildcard sweeps in account-level actions (CreateTopic, ListTopics)
+        # that cannot apply to a topic. Enumerate the topic-scoped set instead —
+        # the same list AWS's own __default_policy uses.
         Sid       = "AllowAccountManagement"
         Effect    = "Allow"
         Principal = { AWS = "arn:aws:iam::${local.account_id}:root" }
-        Action    = "sns:*"
-        Resource  = aws_sns_topic.alerts.arn
+        Action = [
+          "sns:AddPermission",
+          "sns:DeleteTopic",
+          "sns:GetTopicAttributes",
+          "sns:ListSubscriptionsByTopic",
+          "sns:Publish",
+          "sns:RemovePermission",
+          "sns:SetTopicAttributes",
+          "sns:Subscribe",
+          "sns:Receive",
+        ]
+        Resource = aws_sns_topic.alerts.arn
       },
       {
         Sid       = "AllowEventBridgePublish"
