@@ -142,9 +142,10 @@ public keys at `https://loonvault.cloudflareaccess.com/cdn-cgi/access/certs`).
 
 ## Detection Pipeline
 
-Nine rules. EventBridge for single-occurrence signals (one event = already suspicious).
-CloudWatch Logs metric filter for rate-based signals (spike detection requires counting across
-time: EventBridge has no memory across events).
+Nine rules across two transports. EventBridge for single-occurrence signals on regional
+services (one event = already suspicious, alert in seconds). CloudWatch Logs metric-filter
+alarms for the rest: rate-based signals (spike detection requires counting across time:
+EventBridge has no memory across events) and global-service signals (see Region placement).
 
 **Two trails, by design.** A persistent **organization trail** in the management account is the
 durable, tamper-resistant audit record (member accounts cannot modify, delete, or read it: the
@@ -153,22 +154,34 @@ CloudWatch Logs group *inside* the member account, which is what rule 6's metric
 org trail delivers to the management account, where a member-account filter cannot reach it). The
 org trail keeps a durable audit record independently of the ephemeral stack.
 
-**Region placement.** Rules keyed on global-service events (IAM policy changes, console sign-in,
-root activity) are deployed in **us-east-1**, because AWS delivers global-service events only to
-the us-east-1 event bus; the remaining rules run in ca-central-1 alongside the stack. The
-multi-region member trail captures global-service events in its logs in either Region.
+**Region placement (ADR-0014).** AWS delivers global-service events (IAM policy changes,
+console sign-in, root activity) only to the **us-east-1** event bus — and the region-lock SCP
+(ADR-0009) denies creating EventBridge rules there. Rules 2/3/4 therefore run as **CloudWatch
+Logs metric-filter alarms in ca-central-1**, reading the multi-region member trail's log group,
+which already captures global-service events. The filter patterns are the CIS AWS Foundations
+Benchmark patterns **verbatim** (Security Hub controls CloudWatch.1/.3/.4 check for these exact
+patterns and fail if terms are added). Trade-off: ~5–10 min alert latency on those three rules
+instead of seconds (see Honest Residual Risks).
 
 | # | Signal | B-13 Principle | Tool | Pattern / Filter | Threshold |
 |---|---|---|---|---|---|
 | 1 | CloudTrail disabled | Security monitoring & response | EventBridge → SNS | `eventName`: `StopLogging`, `DeleteTrail`, `UpdateTrail` | 1 occurrence |
-| 2 | Console sign-in without MFA | Identity & access management | EventBridge → SNS | `source: aws.signin`, `MFAUsed: No` | 1 occurrence |
-| 3 | Root account usage | Identity & access management | EventBridge → SNS | `userIdentity.type: Root` | 1 occurrence |
-| 4 | IAM policy widened | Identity & access management | EventBridge → SNS | `eventName`: `PutUserPolicy`, `AttachRolePolicy`, `CreatePolicy`, `PutRolePolicy`, `DetachRolePolicy`, `DeleteUserPolicy` | 1 occurrence |
+| 2 | Console sign-in without MFA | Identity & access management | CloudTrail → CW Logs → metric filter → CW Alarm → SNS | CIS 4.2: `{ ($.eventName = "ConsoleLogin") && ($.additionalEventData.MFAUsed != "Yes") }` | ≥ 1 in 5 min |
+| 3 | Root account usage | Identity & access management | CloudTrail → CW Logs → metric filter → CW Alarm → SNS | CIS 4.3: `{ $.userIdentity.type = "Root" && $.userIdentity.invokedBy NOT EXISTS && $.eventType != "AwsServiceEvent" }` | ≥ 1 in 5 min |
+| 4 | IAM policy changed | Identity & access management | CloudTrail → CW Logs → metric filter → CW Alarm → SNS | CIS 4.4: the full 16-event IAM policy mutation list (`Put*Policy`, `Attach*`/`Detach*`, `CreatePolicy(Version)`, `DeletePolicy(Version)`, `Delete*Policy`) | ≥ 1 in 5 min |
 | 5 | Security group rule changed | Infrastructure security | EventBridge → SNS | `eventName`: `AuthorizeSecurityGroupIngress`, `RevokeSecurityGroupIngress`, `AuthorizeSecurityGroupEgress`, `RevokeSecurityGroupEgress` | 1 occurrence |
 | 6 | AccessDenied spike | Security monitoring & response | CloudTrail → CW Logs → metric filter → CW Alarm → SNS | `{ ($.errorCode = "AccessDenied") \|\| ($.errorCode = "*UnauthorizedOperation") }` | > 5 in 5 min |
 | 7 | KMS CMK disabled or deletion scheduled | Data security (at rest) | EventBridge → SNS | `source: aws.kms`, `eventName`: `DisableKey`, `ScheduleKeyDeletion`, `CancelKeyDeletion` | 1 occurrence |
 | 8 | Anomalous GetSecretValue | Identity & access management | EventBridge → SNS | `source: aws.secretsmanager`, `eventName`: `GetSecretValue` | 1 occurrence |
 | 9 | Detection rule tampered | Security monitoring & response | EventBridge → SNS | `source: aws.events`, `eventName`: `DeleteRule`, `DisableRule`, `RemoveTargets` | 1 occurrence |
+
+**Rules 2–4** -- CIS-verbatim metric filters (see Region placement). Rule 2 is expected-but-logged
+for IAM Identity Center sign-ins: the `ConsoleLogin` event records `MFAUsed: No` for federated
+sessions because MFA happens at the IdP, so every SSO console login fires it — same triage posture
+as rule 8 (acknowledge your own sign-ins; investigate any others). Rule 3's CIS pattern excludes
+AWS-service-initiated root events (`invokedBy`/`AwsServiceEvent`), which the old EventBridge
+pattern would have alerted on. Rule 4 covers the full 16-event CIS list — the old pattern was
+missing `DeletePolicy` and `DeletePolicyVersion`.
 
 **Rule 6** -- AccessDenied spike is the fingerprint of permission enumeration (Pacu, ScoutSuite). One AccessDenied is noise; a burst is an attacker probing what a compromised credential can reach.
 
@@ -176,7 +189,7 @@ multi-region member trail captures global-service events in its logs in either R
 
 **Rule 8** -- Zero-standing-baseline signal. No automated, always-on principal holds `secretsmanager:GetSecretValue`: no Lambda execution role has it, and the only Secrets Manager secret is the RDS-managed master password. Every `GetSecretValue` event therefore resolves to one of three things: (a) RDS-managed rotation (service principal `rds.amazonaws.com`), (b) a deliberate, rare operator maintenance action -- `db-init` on every stack bring-up (ADR-0008) or the documented cloud-exit export, both run with the operator's own credentials -- or (c) a compromise. The rule fires on all three (expected-but-logged): the operator acknowledges (a) and (b) and investigates anything else. See runbook for the triage procedure.
 
-**Rule 9** -- Watches for suppression-class operations: deletion, disabling, or target removal from EventBridge rules. `PutRule` is deliberately excluded (every `loonvault-apply` fires it, creating noise). Residual limitation: rule 9 cannot detect its own deletion (self-referential detection problem); production fix is a dedicated monitoring account with cross-account CloudTrail delivery.
+**Rule 9** -- Watches for suppression-class operations across both detection transports: deletion, disabling, or target removal on EventBridge rules (`DeleteRule`, `DisableRule`, `RemoveTargets`) and on the metric-filter alarms (`DeleteMetricFilter`, `DeleteAlarms`, `DisableAlarmActions`). `PutRule`/`PutMetricFilter` are deliberately excluded (every `loonvault-apply` fires them, creating noise). Residual limitation: rule 9 cannot detect its own deletion (self-referential detection problem); production fix is a dedicated monitoring account with cross-account CloudTrail delivery.
 
 ---
 
@@ -470,6 +483,15 @@ answer its questions out loud, unaided.
    the one a production deployment would raise to >= 2 years (alongside Residual Risk #7's
    relocation to a Log Archive account). Each short-retention log group is tagged in code with
    a `CKV_AWS_338` Checkov skip citing this residual, so the gap is explicit, not silent.
+9. **Global-service detections alert in minutes, not seconds.** Rules 2/3/4 (no-MFA sign-in,
+   root usage, IAM policy changes) run as CloudWatch metric-filter alarms because the
+   region-lock SCP forbids the us-east-1 EventBridge rules those global-service events would
+   need (ADR-0014). The path is CloudTrail → CW Logs delivery (~5 min) → alarm evaluation,
+   so expect **~5–10 minutes** from action to email versus seconds on the EventBridge rules.
+   Accepted: these are low-volume, any-occurrence-is-suspicious signals where the detection
+   guarantee matters more than latency, and the pattern is the CIS/Security Hub canonical one.
+   Production fix: a delegated-admin security account outside the SCP's scope hosting the
+   us-east-1 rules.
 
 ---
 

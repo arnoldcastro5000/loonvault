@@ -1,11 +1,20 @@
 # Detection pipeline: 9 rules
 #
-# 8 EventBridge rules  → SNS  (single-occurrence, high-signal events)
-# 1 CW metric filter   → alarm → SNS  (rate-based: AccessDenied spike)
+# 5 EventBridge rules  → SNS           (regional services; near-real-time)
+# 4 CW metric filters  → alarm → SNS   (rules 2/3/4: global-service events;
+#                                       rule 6: rate-based AccessDenied spike)
+#
+# Why two transports (ADR-0014): EventBridge only sees global-service events
+# (IAM, console sign-in) on the us-east-1 bus, and the region-lock SCP
+# (ADR-0009) denies creating rules there. The multi-region member trail already
+# delivers those same events into the ca-central-1 log group, so rules 2/3/4 use
+# the CIS AWS Foundations metric-filter pattern instead — the same mechanism
+# Security Hub's CloudWatch.1/.3/.4 controls check for verbatim. Trade-off:
+# ~5-10 min alert latency vs seconds, documented in plan.md residuals.
 #
 # Infrastructure: a member-account CloudTrail trail delivering management events
-# to CloudWatch Logs. This enables the AccessDenied metric filter (rule 6) and
-# captures IAM/sign-in events from us-east-1 into the ca-central-1 log group via
+# to CloudWatch Logs. This feeds all four metric filters and captures IAM/
+# sign-in events from us-east-1 into the ca-central-1 log group via
 # multi-region delivery. The organisation-wide trail in the management account is
 # the durable, tamper-resistant record; this trail's purpose is CW Logs access.
 # First trail per account per region: management events are free.
@@ -149,7 +158,7 @@ resource "aws_iam_role_policy" "cloudtrail_cwl" {
 
 resource "aws_cloudtrail" "main" {
   #checkov:skip=CKV_AWS_35:Log files are SSE-S3 encrypted at the bucket; the durable org trail uses a dedicated CMK — a CMK here would add cloudtrail grants to the shared key for an ephemeral trail
-  #checkov:skip=CKV_AWS_252:No per-log-file SNS delivery notifications — alerting flows through the EventBridge rules and the metric-filter alarm on this trail's events
+  #checkov:skip=CKV_AWS_252:No per-log-file SNS delivery notifications — alerting flows through the EventBridge rules and the metric-filter alarms on this trail's events
   name                          = local.name_prefix
   s3_bucket_name                = aws_s3_bucket.cloudtrail.id
   is_multi_region_trail         = true
@@ -185,9 +194,11 @@ resource "aws_cloudwatch_metric_alarm" "transform_dlq_depth" {
   ok_actions          = [aws_sns_topic.alerts.arn]
 }
 
-# ── EventBridge rules 1–5, 7–9 → SNS ────────────────────────────────────────
+# ── EventBridge rules 1, 5, 7, 9 → SNS (regional services) ──────────────────
 # EventBridge publishes to SNS via the SNS resource policy (aws_sns_topic_policy
 # in main.tf). No IAM role_arn is needed on SNS targets.
+# Rules 2/3/4 are NOT here: their events are global-service (us-east-1 bus only)
+# and live as CIS metric-filter alarms further down (ADR-0014).
 
 # Rule 1: CloudTrail disabled (B-13: Security monitoring & response)
 resource "aws_cloudwatch_event_rule" "cloudtrail_disabled" {
@@ -205,75 +216,6 @@ resource "aws_cloudwatch_event_rule" "cloudtrail_disabled" {
 
 resource "aws_cloudwatch_event_target" "cloudtrail_disabled" {
   rule      = aws_cloudwatch_event_rule.cloudtrail_disabled.name
-  target_id = "alerts"
-  arn       = aws_sns_topic.alerts.arn
-}
-
-# Rule 2: Console sign-in without MFA (B-13: Identity & access management)
-resource "aws_cloudwatch_event_rule" "no_mfa_signin" {
-  name        = "${local.name_prefix}-no-mfa-signin"
-  description = "Rule 2: Console sign-in succeeded without MFA"
-  event_pattern = jsonencode({
-    source      = ["aws.signin"]
-    detail-type = ["AWS Console Sign In via CloudTrail"]
-    detail = {
-      eventName = ["ConsoleLogin"]
-      additionalEventData = {
-        MFAUsed = ["No"]
-      }
-    }
-  })
-}
-
-resource "aws_cloudwatch_event_target" "no_mfa_signin" {
-  rule      = aws_cloudwatch_event_rule.no_mfa_signin.name
-  target_id = "alerts"
-  arn       = aws_sns_topic.alerts.arn
-}
-
-# Rule 3: Root account used (B-13: Identity & access management)
-# No source filter: root can call any service. Matches both API calls and sign-ins.
-resource "aws_cloudwatch_event_rule" "root_usage" {
-  name        = "${local.name_prefix}-root-usage"
-  description = "Rule 3: Any action by the root account"
-  event_pattern = jsonencode({
-    detail-type = ["AWS API Call via CloudTrail", "AWS Console Sign In via CloudTrail"]
-    detail = {
-      userIdentity = {
-        type = ["Root"]
-      }
-    }
-  })
-}
-
-resource "aws_cloudwatch_event_target" "root_usage" {
-  rule      = aws_cloudwatch_event_rule.root_usage.name
-  target_id = "alerts"
-  arn       = aws_sns_topic.alerts.arn
-}
-
-# Rule 4: IAM policy changed (B-13: Identity & access management)
-resource "aws_cloudwatch_event_rule" "iam_policy_change" {
-  name        = "${local.name_prefix}-iam-policy-change"
-  description = "Rule 4: IAM policy attached, created, or modified"
-  event_pattern = jsonencode({
-    source      = ["aws.iam"]
-    detail-type = ["AWS API Call via CloudTrail"]
-    detail = {
-      eventSource = ["iam.amazonaws.com"]
-      eventName = [
-        "AttachRolePolicy", "AttachUserPolicy", "AttachGroupPolicy",
-        "CreatePolicy", "CreatePolicyVersion",
-        "PutRolePolicy", "PutUserPolicy", "PutGroupPolicy",
-        "DetachRolePolicy", "DetachUserPolicy", "DetachGroupPolicy",
-        "DeleteUserPolicy", "DeleteRolePolicy",
-      ]
-    }
-  })
-}
-
-resource "aws_cloudwatch_event_target" "iam_policy_change" {
-  rule      = aws_cloudwatch_event_rule.iam_policy_change.name
   target_id = "alerts"
   arn       = aws_sns_topic.alerts.arn
 }
@@ -353,18 +295,24 @@ resource "aws_cloudwatch_event_target" "secrets_access" {
 }
 
 # Rule 9: Detection rule tampered (B-13: Security monitoring & response, G-05)
-# Watches suppression-class operations only. PutRule is excluded: every loonvault-apply
-# fires it on managed rules, producing false positives. Residual: rule 9 cannot detect
-# its own deletion (self-referential problem — see T-038 in threat model).
+# Watches suppression-class operations only, across BOTH detection transports:
+# EventBridge rules (DeleteRule/DisableRule/RemoveTargets) and the CIS metric-filter
+# alarms (DeleteMetricFilter/DeleteAlarms/DisableAlarmActions — rules 2/3/4/6 live
+# there, ADR-0014). PutRule/PutMetricFilter are excluded: every loonvault-apply fires
+# them on managed resources, producing false positives. No source filter: matching on
+# eventSource alone avoids guessing each service's EventBridge source name. Residual:
+# rule 9 cannot detect its own deletion (self-referential problem — see T-038).
 resource "aws_cloudwatch_event_rule" "detection_tampering" {
   name        = "${local.name_prefix}-detection-tampering"
-  description = "Rule 9: EventBridge rule deleted, disabled, or detargeted (G-05)"
+  description = "Rule 9: detection rule, metric filter, or alarm deleted or disabled (G-05)"
   event_pattern = jsonencode({
-    source      = ["aws.events"]
     detail-type = ["AWS API Call via CloudTrail"]
     detail = {
-      eventSource = ["events.amazonaws.com"]
-      eventName   = ["DeleteRule", "DisableRule", "RemoveTargets"]
+      eventSource = ["events.amazonaws.com", "logs.amazonaws.com", "monitoring.amazonaws.com"]
+      eventName = [
+        "DeleteRule", "DisableRule", "RemoveTargets",
+        "DeleteMetricFilter", "DeleteAlarms", "DisableAlarmActions",
+      ]
     }
   })
 }
@@ -404,6 +352,110 @@ resource "aws_cloudwatch_metric_alarm" "access_denied_spike" {
   period              = 300
   evaluation_periods  = 1
   threshold           = 5
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+# ── Rules 2–4: global-service detections as CIS metric-filter alarms ─────────
+# These events (console sign-in, IAM, root) are global-service: EventBridge only
+# delivers them to the us-east-1 bus, which the region-lock SCP (ADR-0009) puts
+# off-limits. The multi-region trail already lands them in this log group, so
+# they use the CIS AWS Foundations Benchmark metric-filter patterns VERBATIM —
+# Security Hub's CloudWatch.1/.3/.4 controls fail if any term is added or
+# removed, so do not "improve" the patterns. Alert latency ~5-10 min (trail →
+# CW Logs delivery + alarm evaluation); accepted trade-off per ADR-0014.
+
+# Rule 2: Console sign-in without MFA (B-13: Identity & access management)
+# CIS 4.2 / Security Hub CloudWatch.3. EXPECTED ALERT: IAM Identity Center
+# sign-ins record MFAUsed="No" on the ConsoleLogin event (MFA happens at the
+# IdP, invisible here), so every SSO console login fires this — same
+# expected-but-logged posture as rule 8. See runbook "Expected alerts".
+resource "aws_cloudwatch_log_metric_filter" "no_mfa_signin" {
+  name           = "${local.name_prefix}-no-mfa-signin"
+  log_group_name = aws_cloudwatch_log_group.cloudtrail.name
+  pattern        = "{($.eventName=\"ConsoleLogin\") && ($.additionalEventData.MFAUsed !=\"Yes\")}"
+
+  metric_transformation {
+    name          = "NoMfaSigninCount"
+    namespace     = "LoonVault/Security"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "no_mfa_signin" {
+  alarm_name          = "${local.name_prefix}-no-mfa-signin"
+  alarm_description   = "Rule 2: Console sign-in without MFA (CIS 4.2; SSO logins expected — see runbook)"
+  namespace           = "LoonVault/Security"
+  metric_name         = "NoMfaSigninCount"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+# Rule 3: Root account used (B-13: Identity & access management)
+# CIS 4.3 / Security Hub CloudWatch.1. Better than the old EventBridge pattern:
+# invokedBy/AwsServiceEvent exclusions suppress AWS-service-initiated root noise.
+resource "aws_cloudwatch_log_metric_filter" "root_usage" {
+  name           = "${local.name_prefix}-root-usage"
+  log_group_name = aws_cloudwatch_log_group.cloudtrail.name
+  pattern        = "{$.userIdentity.type=\"Root\" && $.userIdentity.invokedBy NOT EXISTS && $.eventType !=\"AwsServiceEvent\"}"
+
+  metric_transformation {
+    name          = "RootUsageCount"
+    namespace     = "LoonVault/Security"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "root_usage" {
+  alarm_name          = "${local.name_prefix}-root-usage"
+  alarm_description   = "Rule 3: Root account activity — root should never be used day-to-day (CIS 4.3)"
+  namespace           = "LoonVault/Security"
+  metric_name         = "RootUsageCount"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+# Rule 4: IAM policy changed (B-13: Identity & access management)
+# CIS 4.4 / Security Hub CloudWatch.4 — the full 16-event CIS list (the old
+# EventBridge rule was missing DeletePolicy and DeletePolicyVersion).
+resource "aws_cloudwatch_log_metric_filter" "iam_policy_change" {
+  name           = "${local.name_prefix}-iam-policy-change"
+  log_group_name = aws_cloudwatch_log_group.cloudtrail.name
+  pattern        = "{($.eventName=DeleteGroupPolicy)||($.eventName=DeleteRolePolicy)||($.eventName=DeleteUserPolicy)||($.eventName=PutGroupPolicy)||($.eventName=PutRolePolicy)||($.eventName=PutUserPolicy)||($.eventName=CreatePolicy)||($.eventName=DeletePolicy)||($.eventName=CreatePolicyVersion)||($.eventName=DeletePolicyVersion)||($.eventName=AttachRolePolicy)||($.eventName=DetachRolePolicy)||($.eventName=AttachUserPolicy)||($.eventName=DetachUserPolicy)||($.eventName=AttachGroupPolicy)||($.eventName=DetachGroupPolicy)}"
+
+  metric_transformation {
+    name          = "IamPolicyChangeCount"
+    namespace     = "LoonVault/Security"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "iam_policy_change" {
+  alarm_name          = "${local.name_prefix}-iam-policy-change"
+  alarm_description   = "Rule 4: IAM policy created, changed, attached, or deleted (CIS 4.4)"
+  namespace           = "LoonVault/Security"
+  metric_name         = "IamPolicyChangeCount"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
