@@ -47,6 +47,18 @@ jobs:
           tflint --recursive
 
       - name: checkov
+        # TEMP-DEBUG: also surface each failed check as an ::error annotation so the
+        # result is readable via the checks API (job logs unreachable from the
+        # reviewer's sandbox). REVERT after diagnosis.
         run: |
           pip install checkov==3.3.1
-          checkov -d infra/ --framework terraform --quiet
+          set +e
+          checkov -d infra/ --framework terraform --quiet --compact > /tmp/ckv.out 2>&1
+          rc=$?
+          set -e
+          cat /tmp/ckv.out
+          if [ "$rc" -ne 0 ]; then
+            grep -E "^Check:|FAILED for resource:" /tmp/ckv.out | paste -d' ' - - | head -10 \
+              | while IFS= read -r line; do echo "::error::${line}"; done
+          fi
+          exit "$rc"
