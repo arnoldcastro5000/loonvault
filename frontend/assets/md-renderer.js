@@ -24,7 +24,11 @@
 
   // Only permit safe link schemes; block javascript:, data:, etc.
   function safeHref(url) {
-    var u = url.trim();
+    // The URL arrives already HTML-escaped by inline(); undo that first so the
+    // single escapeHtml below doesn't double-escape (breaks &-separated queries).
+    var u = url.trim().replace(/&(amp|lt|gt|quot|#39);/g, function (_, e) {
+      return { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" }[e];
+    });
     if (/^(https?:\/\/|\/|#|\.\/|\.\.\/|[\w./?=&%-]+\.md)/i.test(u) && !/^\s*javascript:/i.test(u)) {
       return escapeHtml(u);
     }

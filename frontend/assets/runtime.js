@@ -10,6 +10,6 @@ window.LOONVAULT = {
   snapshotBase: "https://snapshots-loonvault.cloudsecuritypractice.com",
 
   // Series code to show in the live panel (a BoC Valet code in the indicators
-  // catalogue). Set this to one that exists in your deployment.
-  defaultSeries: "CPI",
+  // catalogue). Must be a series db-init actually seeds (see the runbook).
+  defaultSeries: "FXCADUSD",
 };
