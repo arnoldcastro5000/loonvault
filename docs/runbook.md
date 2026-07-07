@@ -147,6 +147,43 @@ terraform -chdir=infra/loonvault output api_endpoint
 # curl the endpoint with the X-Origin-Secret header; expect FXCADUSD observations
 ```
 
+## Expected alerts on first apply
+
+Two detection rules can fire legitimately during or immediately after `loonvault-apply`.
+Both are expected and do not indicate a breach.
+
+**Rule 8 -- Anomalous GetSecretValue (fires on every apply)**
+
+Detection rule 8 alerts on every `GetSecretValue` in the account because no automated,
+always-on principal holds this permission. That keeps every alert meaningful, but three
+callers are legitimate, not just AWS rotation:
+
+- **RDS-managed rotation** -- service principal `rds.amazonaws.com`; fires after apply.
+- **Operator db-init** -- `just loonvault-db-init` reads the master password with your own
+  credentials on every bring-up (ADR-0008). The caller is your IAM Identity Center admin
+  session, NOT a service principal.
+- **Operator cloud-exit export** -- the documented `aws secretsmanager get-secret-value`
+  exit path, also run with your own credentials.
+
+When this alert arrives:
+
+1. Is the caller `rds.amazonaws.com` / `userIdentity.type` `AWSService`? Managed rotation:
+   acknowledge.
+2. Is the caller your own admin session AND are you running db-init or the cloud-exit export
+   right now? Expected maintenance: acknowledge.
+3. Otherwise -- a `GetSecretValue` you cannot tie to rotation or to a maintenance action you
+   are performing -- treat as a compromise indicator and investigate immediately.
+
+**Rule 9 -- Detection rule tampered (fires on every apply)**
+
+`loonvault-apply` calls `events:PutRule` on every EventBridge rule it manages. The
+tamper detection rule (rule 9) watches `DeleteRule`, `DisableRule`, and `RemoveTargets`
+-- not `PutRule` -- so Terraform applies do not trigger it. Note `loonvault-destroy`
+*does* call `DeleteRule` on every rule; whether that delivers an alert before the SNS
+topic is torn down is timing-dependent (CloudTrail to EventBridge latency vs. teardown
+speed) and is being validated (see issue 010). Treat a rule-9 alert as a real
+suppression attempt only if it fires **outside an apply or destroy window**.
+
 ## Destroy (after the interview)
 
 ```bash
