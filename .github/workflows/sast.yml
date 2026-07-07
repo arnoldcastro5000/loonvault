@@ -21,25 +21,13 @@ jobs:
           persist-credentials: false
 
       - name: semgrep
-        # TEMP-DEBUG: also surface each finding as an ::error annotation so the result
-        # is readable via the checks API (job logs unreachable from the reviewer's
-        # sandbox). REVERT after diagnosis.
         run: |
           pip install semgrep==1.166.0
-          set +e
           semgrep --config p/python \
                   --config p/owasp-top-ten \
                   --config p/typescript \
                   --config p/react \
-                  --json --error . > /tmp/semgrep.json 2> /tmp/semgrep.err
-          rc=$?
-          set -e
-          cat /tmp/semgrep.err
-          if [ "$rc" -ne 0 ]; then
-            jq -r '.results[] | "::error::\(.path):\(.start.line) \(.check_id)"' /tmp/semgrep.json 2>/dev/null | head -10
-            tail -5 /tmp/semgrep.err | while IFS= read -r line; do echo "::error::semgrep-stderr: ${line}"; done
-          fi
-          exit "$rc"
+                  --error .
 
       - name: ruff
         if: hashFiles('**/*.py') != ''
