@@ -54,6 +54,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail" {
     # 30 days: live feed, not a retention store (force_destroy bucket). Protected B's
     # 2-year requirement is documented as a cost residual in plan.md; org trail is durable.
     expiration { days = 30 }
+    # Reclaim storage from failed CloudTrail multipart deliveries (CKV_AWS_300)
+    abort_incomplete_multipart_upload { days_after_initiation = 7 }
   }
   depends_on = [aws_s3_bucket_versioning.cloudtrail]
 }
