@@ -4,7 +4,9 @@ resource "aws_apigatewayv2_api" "main" {
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_origins = ["*"]
+    # Only the LoonVault frontend calls this API from a browser (via the Cloudflare
+    # API worker, which injects X-Origin-Secret). No other origin has a reason to.
+    allow_origins = [var.site_origin]
     allow_methods = ["GET"]
     allow_headers = ["Content-Type"]
     max_age       = 300

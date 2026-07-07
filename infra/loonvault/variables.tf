@@ -43,6 +43,12 @@ variable "origin_secret_ssm_path" {
   default     = "/loonvault/origin-secret"
 }
 
+variable "site_origin" {
+  description = "Frontend origin allowed by the API's CORS policy (browser calls the live API from this site)"
+  type        = string
+  default     = "https://loonvault.cloudsecuritypractice.com"
+}
+
 variable "vpc_cidr" {
   description = "VPC CIDR block"
   type        = string
