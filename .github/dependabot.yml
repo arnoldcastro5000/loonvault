@@ -1,17 +1,27 @@
 version: 2
+
+# cooldown: hold new releases for 7 days before proposing the bump — a freshly
+# published compromised release is usually detected and yanked within days
+# (supply-chain guardrail; enforced by SAST's dependabot-missing-cooldown rule).
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directories:
       - "/lambdas/*"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
