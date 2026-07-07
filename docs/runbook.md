@@ -156,8 +156,18 @@ terraform -chdir=infra/loonvault output api_endpoint
 
 ## Expected alerts on first apply
 
-Two detection rules can fire legitimately during or immediately after `loonvault-apply`.
-Both are expected and do not indicate a breach.
+Three detection rules can fire legitimately during or immediately after `loonvault-apply`.
+All are expected and do not indicate a breach.
+
+**Rule 2 -- Console sign-in without MFA (fires on every SSO console login)**
+
+The CIS 4.2 filter pattern (used verbatim — Security Hub checks it) alerts when a
+`ConsoleLogin` event records `MFAUsed: No`. IAM Identity Center sign-ins always record
+`MFAUsed: No` because MFA is enforced at the IdP, invisible to the CloudTrail event. So
+every SSO console login — including your own — produces this alert ~5–10 minutes later
+(metric-filter path, ADR-0014). Same triage posture as rule 8: acknowledge sign-ins you
+performed; treat any `ConsoleLogin` you did not perform as a compromise indicator (it
+would be an IAM-user or root sign-in path that bypassed Identity Center).
 
 **Rule 8 -- Anomalous GetSecretValue (fires on every apply)**
 
@@ -183,13 +193,15 @@ When this alert arrives:
 
 **Rule 9 -- Detection rule tampered (fires on every apply)**
 
-`loonvault-apply` calls `events:PutRule` on every EventBridge rule it manages. The
-tamper detection rule (rule 9) watches `DeleteRule`, `DisableRule`, and `RemoveTargets`
--- not `PutRule` -- so Terraform applies do not trigger it. Note `loonvault-destroy`
-*does* call `DeleteRule` on every rule; whether that delivers an alert before the SNS
-topic is torn down is timing-dependent (CloudTrail to EventBridge latency vs. teardown
-speed) and is being validated (see issue 010). Treat a rule-9 alert as a real
-suppression attempt only if it fires **outside an apply or destroy window**.
+`loonvault-apply` calls `events:PutRule` / `logs:PutMetricFilter` on every detection
+resource it manages. The tamper detection rule (rule 9) watches suppression-class
+operations only (`DeleteRule`, `DisableRule`, `RemoveTargets`, `DeleteMetricFilter`,
+`DeleteAlarms`, `DisableAlarmActions`) -- not the Put* calls -- so Terraform applies do
+not trigger it. Note `loonvault-destroy` *does* call the delete operations on every rule,
+filter, and alarm; whether that delivers an alert before the SNS topic is torn down is
+timing-dependent (CloudTrail to EventBridge latency vs. teardown speed) and is being
+validated (see issue 010). Treat a rule-9 alert as a real suppression attempt only if it
+fires **outside an apply or destroy window**.
 
 ## Destroy (after the interview)
 
