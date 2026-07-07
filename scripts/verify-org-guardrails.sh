@@ -65,15 +65,22 @@ echo "=== org guardrail verification (read-only) ==="
 echo
 
 # ── 1-2. Identities ───────────────────────────────────────────────────────────
+# Fail with a login hint instead of a raw exit when an SSO session has expired.
 echo "--- Identities ---"
-MGMT_ACCT=$(mgmt sts get-caller-identity --query Account --output text)
+MGMT_ACCT=$(mgmt sts get-caller-identity --query Account --output text) || {
+  echo "ERROR: cannot authenticate as '$MGMT_PROFILE' — run: aws sso login --profile $MGMT_PROFILE" >&2
+  exit 2
+}
 ORG_MGMT_ACCT=$(mgmt organizations describe-organization \
   --query Organization.MasterAccountId --output text)
 check "mgmt profile ($MGMT_PROFILE) is the org management account" \
   "$MGMT_ACCT" "$ORG_MGMT_ACCT"
 
 WORKLOADS_ACCT=$(aws --profile "$WORKLOADS_PROFILE" --region "$AWS_REGION" \
-  sts get-caller-identity --query Account --output text)
+  sts get-caller-identity --query Account --output text) || {
+  echo "ERROR: cannot authenticate as '$WORKLOADS_PROFILE' — run: aws sso login --profile $WORKLOADS_PROFILE" >&2
+  exit 2
+}
 if [[ "$WORKLOADS_ACCT" != "$MGMT_ACCT" ]]; then
   check "workloads profile ($WORKLOADS_PROFILE) is a member account" "member" "member"
 else
@@ -99,8 +106,12 @@ read -r IS_LOGGING DELIVERY_ERR <<< "$(mgmt cloudtrail get-trail-status \
 check "trail is logging" "$IS_LOGGING" "True"
 check "no delivery errors" "$DELIVERY_ERR" "none"
 
+# --max-keys (server-side) + --no-paginate: exactly one API call, one result line.
+# Client-side pagination (--max-items) evaluates the JMESPath per page and emits
+# one number per page ("1\n0"), which breaks the comparison.
 LOG_OBJECTS=$(mgmt s3api list-objects-v2 --bucket "$S3_BUCKET_NAME" \
-  --prefix "AWSLogs/" --max-items 1 --query 'length(Contents || `[]`)' --output text)
+  --prefix "AWSLogs/" --max-keys 1 --no-paginate \
+  --query 'length(Contents || `[]`)' --output text)
 check "log objects present in s3://$S3_BUCKET_NAME/AWSLogs/" "$LOG_OBJECTS" "1"
 
 # ── 6-8. Region-lock SCP wiring ───────────────────────────────────────────────
