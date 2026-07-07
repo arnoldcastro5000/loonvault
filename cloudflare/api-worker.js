@@ -82,8 +82,24 @@ export default {
       return blocked(502, "Bad Gateway");
     }
 
+    // Allowlist response headers: the worker exists to hide the execute-api
+    // origin, so nothing it emits (e.g. a Location or debug header naming the
+    // origin host) may pass through. Content-Encoding is deliberately absent —
+    // the Workers runtime hands us an already-decoded body.
+    const out = new Response(resp.body, { status: resp.status, statusText: resp.statusText });
+    for (const h of [
+      "content-type",
+      "access-control-allow-origin",
+      "access-control-allow-methods",
+      "access-control-allow-headers",
+      "access-control-expose-headers",
+      "access-control-max-age",
+      "vary",
+    ]) {
+      const v = resp.headers.get(h);
+      if (v) out.headers.set(h, v);
+    }
     // Live means live: never let the edge cache observations.
-    const out = new Response(resp.body, resp);
     out.headers.set("Cache-Control", "no-store");
     return out;
   },

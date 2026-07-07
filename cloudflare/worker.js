@@ -87,6 +87,9 @@ export default {
     const headers = new Headers(request.headers);
     headers.set("X-Origin-Secret", env.ORIGIN_SECRET);
     headers.delete("host"); // IMPORTANT: let the Function URL receive its own host
+    // The site is credential-free: never forward browser credentials to the origin.
+    headers.delete("cookie");
+    headers.delete("authorization");
 
     const modified = new Request(url.toString(), { method: request.method, headers });
     try {

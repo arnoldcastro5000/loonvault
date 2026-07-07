@@ -25,7 +25,9 @@
   }
 
   function buildSidebar(active) {
-    var groups = {};
+    // Null prototype: a group named "__proto__"/"constructor" must be a plain
+    // key, not a prototype hit (which would crash the sidebar build).
+    var groups = Object.create(null);
     docs.forEach(function (d) {
       (groups[d.group] = groups[d.group] || []).push(d);
     });
