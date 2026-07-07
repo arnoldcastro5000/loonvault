@@ -19,8 +19,10 @@
 
   function render(observations, source) {
     if (!table) return;
+    // Both sources return observations newest-first (read lambda ORDER BY DESC;
+    // snapshot sorted reverse=True), so the latest 12 are at the FRONT.
     var rows = (observations || [])
-      .slice(-12)
+      .slice(0, 12)
       .map(function (o) {
         var d = o.date || o.d || "";
         var v = o.value != null ? o.value : o.v;

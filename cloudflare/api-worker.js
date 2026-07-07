@@ -30,13 +30,10 @@ function blocked(status, message) {
 
 export default {
   async fetch(request, env) {
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: { "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS" },
-      });
-    }
-    if (request.method !== "GET" && request.method !== "HEAD") {
+    // OPTIONS falls through to the origin: API Gateway owns the CORS config
+    // (allowed origin/methods) and auto-answers preflights, so the edge must not
+    // answer them itself (a 204 without Access-Control-Allow-Origin fails the check).
+    if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "OPTIONS") {
       return blocked(405, "Method Not Allowed");
     }
     if (request.body !== null) {
@@ -72,6 +69,11 @@ export default {
     if (origin) headers.set("Origin", origin);
     const accept = request.headers.get("accept");
     if (accept) headers.set("Accept", accept);
+    // Preflight metadata, so API Gateway can answer OPTIONS correctly.
+    for (const h of ["access-control-request-method", "access-control-request-headers"]) {
+      const v = request.headers.get(h);
+      if (v) headers.set(h, v);
+    }
 
     let resp;
     try {
