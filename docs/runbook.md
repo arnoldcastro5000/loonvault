@@ -77,6 +77,13 @@ aws ec2 describe-vpcs --region us-east-2 --profile loonvault-prod   # -> Unautho
 aws ec2 describe-vpcs --region ca-central-1 --profile loonvault-prod  # -> succeeds
 ```
 
+Or run every org-level check at once — org trail health, SCP wiring, OU membership,
+plus the region-lock live test above (read-only; needs both profiles):
+
+```bash
+just verify-org
+```
+
 ## Deploy
 
 ```bash

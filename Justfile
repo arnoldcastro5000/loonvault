@@ -36,6 +36,11 @@ org-apply:
     terraform fmt -recursive -check infra/
     cd infra/org && terraform validate && terraform apply
 
+# Verify org guardrails end-to-end (read-only): org trail health, SCP wiring,
+# OU membership, region-lock live test — outside devcontainer, needs both profiles
+verify-org:
+    ./scripts/verify-org-guardrails.sh
+
 # Init loonvault module with backend config (outside devcontainer, run once)
 # Requires infra/loonvault/backend.hcl — copy from backend.hcl.example and fill in account ID
 loonvault-init:
