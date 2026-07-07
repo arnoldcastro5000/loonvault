@@ -29,7 +29,9 @@
     var u = url.trim().replace(/&(amp|lt|gt|quot|#39);/g, function (_, e) {
       return { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" }[e];
     });
-    if (/^(https?:\/\/|\/|#|\.\/|\.\.\/|[\w./?=&%-]+\.md)/i.test(u) && !/^\s*javascript:/i.test(u)) {
+    // Root-relative must not be protocol-relative (//host) or backslash (/\host,
+    // which browsers normalize to //host) — those navigate off-site.
+    if (/^(https?:\/\/|\/(?![/\\])|#|\.\/|\.\.\/|[\w./?=&%-]+\.md)/i.test(u) && !/^\s*javascript:/i.test(u)) {
       return escapeHtml(u);
     }
     return "#";
@@ -42,14 +44,21 @@
       codes.push(c);
       return "\u0000" + (codes.length - 1) + "\u0000";
     });
+    // Stash the opening <a> tag so the bold/italic passes below cannot rewrite
+    // hrefs containing * — link TEXT stays in the stream so it still formats.
+    var links = [];
     text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (_, t, u) {
-      return '<a href="' + safeHref(u) + '">' + t + "</a>";
+      links.push('<a href="' + safeHref(u) + '">');
+      return "\u0001" + (links.length - 1) + "\u0001" + t + "</a>";
     });
     text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     // Italic without lookbehind (older Safari lacks lookbehind support).
     text = text.replace(/(^|[^*\w])\*([^*\s](?:[^*]*?[^*\s])?)\*(?!\w)/g, "$1<em>$2</em>");
     text = text.replace(/\u0000(\d+)\u0000/g, function (_, i) {
       return "<code>" + codes[+i] + "</code>";
+    });
+    text = text.replace(/\u0001(\d+)\u0001/g, function (_, i) {
+      return links[+i];
     });
     return text;
   }

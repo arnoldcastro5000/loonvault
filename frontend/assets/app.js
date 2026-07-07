@@ -43,7 +43,14 @@
   }
 
   function fetchJson(url) {
-    return fetch(url, { mode: "cors" }).then(function (r) {
+    // Timeout guarantees the snapshot fallback runs even if the origin hangs
+    // (a dead origin fails fast, but a slow one would stall "Loading…" forever).
+    // 8s covers a cold Lambda + RDS connect on the live path.
+    var opts = { mode: "cors" };
+    if (typeof AbortSignal !== "undefined" && AbortSignal.timeout) {
+      opts.signal = AbortSignal.timeout(8000);
+    }
+    return fetch(url, opts).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
     });
@@ -55,22 +62,35 @@
     return payload.observations || payload.data || [];
   }
 
+  // Two-argument .then keeps the error channels separate: only a FETCH failure
+  // falls back to the snapshot; an exception thrown by render() (a display bug)
+  // must not masquerade as "backend offline" — it lands in the trailing catch
+  // with its own message, and every failure is logged for diagnosis.
   setStatus("Loading live data…");
   fetchJson(cfg.apiBase + "/series/" + encodeURIComponent(code))
-    .then(function (p) {
-      render(observationsOf(p), "live API");
-    })
-    .catch(function () {
-      setStatus("Live API unavailable — trying snapshot fallback…");
-      return fetchJson(cfg.snapshotBase + "/" + encodeURIComponent(code) + ".json")
-        .then(function (p) {
-          render(observationsOf(p), "S3 snapshot (fallback)");
-        })
-        .catch(function () {
-          setStatus(
-            "Backend is offline. This is an ephemeral demo backend — it is stood up for live demos and torn down after. The security architecture above stands on its own.",
-            "warn"
-          );
-        });
+    .then(
+      function (p) {
+        render(observationsOf(p), "live API");
+      },
+      function (err) {
+        console.warn("Live API fetch failed; trying snapshot fallback:", err);
+        setStatus("Live API unavailable — trying snapshot fallback…");
+        return fetchJson(cfg.snapshotBase + "/" + encodeURIComponent(code) + ".json").then(
+          function (p) {
+            render(observationsOf(p), "S3 snapshot (fallback)");
+          },
+          function (err2) {
+            console.warn("Snapshot fallback fetch failed:", err2);
+            setStatus(
+              "Backend is offline. This is an ephemeral demo backend — it is stood up for live demos and torn down after. The security architecture above stands on its own.",
+              "warn"
+            );
+          }
+        );
+      }
+    )
+    .catch(function (err) {
+      console.error("Indicator panel render failed:", err);
+      setStatus("Could not display the data (see console) — the backend itself is fine.", "warn");
     });
 })();
