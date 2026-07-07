@@ -127,6 +127,22 @@ aws ssm put-parameter \
   --region ca-central-1
 ```
 
+**1b. Update the Cloudflare API worker** (`cloudflare/api-worker.js`, bound to
+`api-loonvault.cloudsecuritypractice.com/*`). Two of its variables change on every
+destroy/apply cycle — without this the frontend's live-data panel silently falls back to
+snapshots (browser calls 403 at the authorizer):
+
+- `ORIGIN_HOST` — the new API Gateway host:
+  `terraform -chdir=infra/loonvault output -raw api_endpoint` minus the `https://` scheme
+  (the api-id is regenerated each apply).
+- `ORIGIN_SECRET` (encrypted secret) — the exact value you just wrote to
+  `/loonvault/origin-secret` in step 1. Rotating it every bring-up is a feature.
+
+One-time setup (first deploy only): create the worker from `cloudflare/api-worker.js` in
+the Cloudflare dashboard, set `EXPECTED_HOST=api-loonvault.cloudsecuritypractice.com`, and
+bind the route. The site worker is separate and needs no per-apply changes (its secret is
+`/loonvault/frontend/origin-secret`, owned by the always-on stack).
+
 **2. Initialise the database.** Creates the Postgres roles, the IAM-auth users
 (`lv_reader` / `lv_writer`: no passwords; they authenticate with RDS IAM tokens), the
 schema, and seeds the `FXCADUSD` indicator row.
@@ -152,7 +168,13 @@ just loonvault-db-init
 ```bash
 terraform -chdir=infra/loonvault output api_endpoint
 # curl the endpoint with the X-Origin-Secret header; expect FXCADUSD observations
+# curl WITHOUT the header; expect 403 (the authorizer denying — scenario #5)
 ```
+
+Then verify the **browser** path end-to-end (this is what the demo audience sees): open
+`https://loonvault.cloudsecuritypractice.com` and check the indicators panel status line —
+it must say **"source: live API"**, not the snapshot fallback. If it shows the fallback,
+step 1b was missed or `ORIGIN_HOST`/`ORIGIN_SECRET` are stale.
 
 ## Expected alerts on first apply
 
