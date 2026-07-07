@@ -24,3 +24,7 @@ _Avoid_: metric (too narrow), series (too narrow when referring to the full API 
 **Observation**:
 A single value for a Series or Pressure Metric at a specific date. The atomic unit of data stored in RDS and returned by the API.
 _Avoid_: data point, reading, record
+
+## Conventions
+
+**Task entry point**: every command a human runs is a `just` recipe (`just --list` is the catalogue). `scripts/` holds the implementations — kept as standalone files so they stay shellcheck-able and CI-callable without `just`. Don't invoke `./scripts/*` directly; go through the recipe.

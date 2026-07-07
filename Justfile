@@ -36,6 +36,17 @@ org-apply:
     terraform fmt -recursive -check infra/
     cd infra/org && terraform validate && terraform apply
 
+# One-time org-wide CloudTrail bootstrap in the MANAGEMENT account (idempotent-ish;
+# safe to re-run). Requires MGMT_ACCOUNT_ID and management-account credentials:
+# AWS_PROFILE=loonvault MGMT_ACCOUNT_ID=<id> just org-trail-setup
+org-trail-setup:
+    ./scripts/setup-org-cloudtrail.sh
+
+# Verify org guardrails end-to-end (read-only): org trail health, SCP wiring,
+# OU membership, region-lock live test — outside devcontainer, needs both profiles
+verify-org:
+    ./scripts/verify-org-guardrails.sh
+
 # Init loonvault module with backend config (outside devcontainer, run once)
 # Requires infra/loonvault/backend.hcl — copy from backend.hcl.example and fill in account ID
 loonvault-init:
